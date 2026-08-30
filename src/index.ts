@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { ensureAgentRecipes } from "./agent-recipes.js";
+import { CHECK_PROMPT } from "./check-prompt.js";
 import { buildBoardUrl, findTrellisProject, type ReadTextFile, type TrellisProject } from "./config.js";
 import { addWorktreePaths, formatTrellisContext, type TrellisOverview } from "./context.js";
 import {
@@ -22,6 +24,7 @@ export interface ExtensionDependencies {
     path: string,
     signal?: AbortSignal,
   ) => Promise<SpecsForPathResult>;
+  ensureAgentRecipes?: (cwd: string) => Promise<void>;
 }
 
 interface ActiveState {
@@ -37,6 +40,7 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
   const specsForPath = dependencies.specsForPath ?? ((projectId, path, signal) =>
     new TrellisMcpClient().specsForPath(projectId, path, signal));
   const readFileSnapshot = dependencies.readFileSnapshot ?? defaultReadFileSnapshot;
+  const provisionAgentRecipes = dependencies.ensureAgentRecipes ?? ensureAgentRecipes;
 
   return function trellisExtension(pi: ExtensionAPI): void {
     let active: ActiveState | undefined;
@@ -66,9 +70,18 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
           const boardAddress = environment.TRELLIS_BOARD_ADDRESS;
           const boardUrl = buildBoardUrl(project.id, boardAddress);
           const overview = addWorktreePaths(await getOverview(project.id), project.root);
+          let recipeError: unknown;
+          try {
+            await provisionAgentRecipes(ctx.cwd);
+          } catch (error) {
+            recipeError = error;
+          }
           if (activationGeneration !== generation) return;
           active = { project, boardAddress, lastOverview: overview };
           ctx.ui.setStatus("trellis", ctx.ui.theme.fg("dim", formatStatusLine(overview)));
+          if (recipeError) {
+            emit(`Subagent-Rezepte nicht vollständig bereitgestellt: ${messageOf(recipeError)}`);
+          }
           emit(`Trellis-Modus aktiviert: ${boardUrl}`);
         } catch (error) {
           if (activationGeneration !== generation) return;
@@ -109,6 +122,17 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
           return;
         }
         pi.sendUserMessage(INTERVIEW_PROMPT);
+      },
+    });
+
+    pi.registerCommand("trellis:check", {
+      description: "Specs und Glossar mit Subagent-Rezepten prüfen",
+      handler: async () => {
+        if (!active) {
+          emit("/trellis:check erfordert einen aktiven Trellis-Modus. Führe zuerst /trellis:on aus.");
+          return;
+        }
+        pi.sendUserMessage(CHECK_PROMPT);
       },
     });
 
