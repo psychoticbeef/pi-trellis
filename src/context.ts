@@ -14,6 +14,7 @@ export interface StoryOverview {
   status?: string;
   worktree_path?: string;
   worktreePath?: string;
+  gates_open?: boolean;
 }
 
 export interface TrellisOverview {
