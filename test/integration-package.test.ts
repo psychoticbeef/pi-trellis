@@ -11,6 +11,7 @@ describe("IT-4 TypeScript-Package-Entry lädt die Extension", () => {
     const harness = createPiHarness();
     packageExtension(harness.api);
     expect([...harness.commands.keys()].sort()).toEqual([
+      "trellis:check",
       "trellis:init",
       "trellis:off",
       "trellis:on",
