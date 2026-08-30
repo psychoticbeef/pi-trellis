@@ -25,13 +25,19 @@ describe("AT-6 Subagent-Rezepte, Check und Auto-Load", () => {
       .toBe(AGENT_RECIPES["glossary-warden.md"]);
     expect(await readFile(join(agents, "pre-finish-review.md"), "utf8"))
       .toBe(AGENT_RECIPES["pre-finish-review.md"]);
+    expect(await readFile(join(agents, "change-review.md"), "utf8"))
+      .toBe(AGENT_RECIPES["change-review.md"]);
+    expect(await readFile(join(agents, "relic-hunter.md"), "utf8"))
+      .toBe(AGENT_RECIPES["relic-hunter.md"]);
     expect(AGENT_RECIPES["spec-sync-check.md"]).toContain("Vorschlagsliste");
     expect(AGENT_RECIPES["glossary-warden.md"]).toContain("Terminologie-Drift");
     expect(AGENT_RECIPES["pre-finish-review.md"]).toContain("Checkliste");
+    expect(AGENT_RECIPES["change-review.md"]).toContain("Architektur-Specs");
+    expect(AGENT_RECIPES["relic-hunter.md"]).toContain("Code UND Spec");
 
     await harness.commands.get("trellis:check")!("", harness.context(cwd));
     expect(harness.userMessages).toEqual([CHECK_PROMPT]);
-    expect(CHECK_PROMPT).toMatch(/Agent-Tool[\s\S]*parallel[\s\S]*inline/);
+    expect(CHECK_PROMPT).toMatch(/Agent-Tool[\s\S]*relic-hunter[\s\S]*parallel[\s\S]*inline/);
 
   });
 });
