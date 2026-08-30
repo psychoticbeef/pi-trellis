@@ -15,6 +15,7 @@ describe("IT-4 TypeScript-Package-Entry lädt die Extension", () => {
       "trellis:init",
       "trellis:off",
       "trellis:on",
+      "trellis:review",
       "trellis:status",
     ]);
   });

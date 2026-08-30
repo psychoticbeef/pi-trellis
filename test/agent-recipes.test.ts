@@ -8,10 +8,12 @@ import { AGENT_RECIPES, ensureAgentRecipes } from "../src/agent-recipes.js";
 const root = fileURLToPath(new URL("..", import.meta.url));
 
 describe("UT-11 Rezeptformat, Rollen und create-if-absent", () => {
-  it("UT-11 liefert gültige read-only Templates mit allen drei Rollen", async () => {
+  it("UT-11 liefert gültige read-only Templates mit allen Rollen", async () => {
     expect(Object.keys(AGENT_RECIPES).sort()).toEqual([
+      "change-review.md",
       "glossary-warden.md",
       "pre-finish-review.md",
+      "relic-hunter.md",
       "spec-sync-check.md",
     ]);
 

@@ -12,6 +12,7 @@ import {
 } from "./file-hints.js";
 import { INTERVIEW_PROMPT } from "./init-prompt.js";
 import { TrellisMcpClient, type SpecsForPathResult } from "./mcp-client.js";
+import { buildReviewPrompt } from "./review-prompt.js";
 import { formatKanbanStatus, formatStatusLine } from "./status.js";
 
 export interface ExtensionDependencies {
@@ -125,8 +126,19 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
       },
     });
 
+    pi.registerCommand("trellis:review", {
+      description: "Große Änderungen gegen Architektur-Specs prüfen",
+      handler: async (args) => {
+        if (!active) {
+          emit("/trellis:review erfordert einen aktiven Trellis-Modus. Führe zuerst /trellis:on aus.");
+          return;
+        }
+        pi.sendUserMessage(buildReviewPrompt(args));
+      },
+    });
+
     pi.registerCommand("trellis:check", {
-      description: "Specs und Glossar mit Subagent-Rezepten prüfen",
+      description: "Specs, Glossar und Relikte mit Subagent-Rezepten prüfen",
       handler: async () => {
         if (!active) {
           emit("/trellis:check erfordert einen aktiven Trellis-Modus. Führe zuerst /trellis:on aus.");

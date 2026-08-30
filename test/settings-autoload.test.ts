@@ -24,6 +24,7 @@ describe("AT-6 IT-6 Projektlokales Auto-Load im echten pi-Prozess", () => {
       "trellis:init",
       "trellis:off",
       "trellis:on",
+      "trellis:review",
       "trellis:status",
     ]));
   }, 15_000);
