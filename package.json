@@ -1,0 +1,33 @@
+{
+  "name": "pi-trellis",
+  "version": "0.1.0",
+  "description": "Trellis project context, status, and spec-aware file hints for pi",
+  "type": "module",
+  "main": "src/index.ts",
+  "files": [
+    "extensions",
+    "src",
+    "README.md"
+  ],
+  "keywords": [
+    "pi-package"
+  ],
+  "scripts": {
+    "lint": "tsc --noEmit",
+    "test": "npx vitest run --reporter=junit --outputFile=reports/tests.xml"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.84.2",
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions"
+    ]
+  }
+}
