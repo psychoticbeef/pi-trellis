@@ -9,6 +9,21 @@ export type TurnEndHandler = (
   event: { turnIndex: number },
   context: HookContext,
 ) => Promise<void>;
+export type ToolCallHandler = (
+  event: { toolCallId: string; toolName: string; input: Record<string, unknown> },
+  context: HookContext,
+) => Promise<unknown>;
+export type ToolResultHandler = (
+  event: {
+    toolCallId: string;
+    toolName: string;
+    input: Record<string, unknown>;
+    isError: boolean;
+    content?: unknown[];
+    details?: unknown;
+  },
+  context: HookContext,
+) => Promise<unknown>;
 
 export interface CommandContext {
   cwd: string;
@@ -25,23 +40,38 @@ export interface HookContext extends CommandContext {
 
 export function createPiHarness() {
   const commands = new Map<string, CommandHandler>();
-  const messages: Array<{ content: string; display?: boolean }> = [];
+  const messages: Array<{
+    customType?: string;
+    content: string;
+    display?: boolean;
+    options?: { deliverAs?: string; triggerTurn?: boolean };
+  }> = [];
   const userMessages: unknown[] = [];
   const notifications: Array<{ message: string; level: string }> = [];
   const statuses: Array<{ key: string; value: string | undefined }> = [];
   let beforeAgentStart: BeforeAgentStartHandler | undefined;
   let turnEnd: TurnEndHandler | undefined;
+  let toolCall: ToolCallHandler | undefined;
+  let toolResult: ToolResultHandler | undefined;
 
   const api = {
     registerCommand(name: string, options: { handler: CommandHandler }) {
       commands.set(name, options.handler);
     },
-    on(event: string, handler: BeforeAgentStartHandler | TurnEndHandler) {
+    on(
+      event: string,
+      handler: BeforeAgentStartHandler | TurnEndHandler | ToolCallHandler | ToolResultHandler,
+    ) {
       if (event === "before_agent_start") beforeAgentStart = handler as BeforeAgentStartHandler;
       if (event === "turn_end") turnEnd = handler as TurnEndHandler;
+      if (event === "tool_call") toolCall = handler as ToolCallHandler;
+      if (event === "tool_result") toolResult = handler as ToolResultHandler;
     },
-    sendMessage(message: { content: string; display?: boolean }) {
-      messages.push(message);
+    sendMessage(
+      message: { customType?: string; content: string; display?: boolean },
+      options?: { deliverAs?: string; triggerTurn?: boolean },
+    ) {
+      messages.push({ ...message, options });
     },
     sendUserMessage(message: unknown) {
       userMessages.push(message);
@@ -72,6 +102,14 @@ export function createPiHarness() {
     turnEnd: () => {
       if (!turnEnd) throw new Error("turn_end not registered");
       return turnEnd;
+    },
+    toolCall: () => {
+      if (!toolCall) throw new Error("tool_call not registered");
+      return toolCall;
+    },
+    toolResult: () => {
+      if (!toolResult) throw new Error("tool_result not registered");
+      return toolResult;
     },
   };
 }

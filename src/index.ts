@@ -1,13 +1,26 @@
+import { readFile } from "node:fs/promises";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { buildBoardUrl, findTrellisProject, type ReadTextFile, type TrellisProject } from "./config.js";
 import { addWorktreePaths, formatTrellisContext, type TrellisOverview } from "./context.js";
-import { TrellisMcpClient } from "./mcp-client.js";
+import {
+  formatFileHint,
+  normalizeFilePath,
+  projectPath,
+  selectUnhintedDoneStories,
+} from "./file-hints.js";
+import { TrellisMcpClient, type SpecsForPathResult } from "./mcp-client.js";
 import { formatKanbanStatus, formatStatusLine } from "./status.js";
 
 export interface ExtensionDependencies {
   readTextFile?: ReadTextFile;
+  readFileSnapshot?: (path: string) => Promise<string | undefined>;
   environment?: NodeJS.ProcessEnv;
   getOverview?: (projectId: string, signal?: AbortSignal) => Promise<TrellisOverview>;
+  specsForPath?: (
+    projectId: string,
+    path: string,
+    signal?: AbortSignal,
+  ) => Promise<SpecsForPathResult>;
 }
 
 interface ActiveState {
@@ -20,11 +33,21 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
   const environment = dependencies.environment ?? process.env;
   const getOverview = dependencies.getOverview ?? ((projectId, signal) =>
     new TrellisMcpClient().getOverview(projectId, signal));
+  const specsForPath = dependencies.specsForPath ?? ((projectId, path, signal) =>
+    new TrellisMcpClient().specsForPath(projectId, path, signal));
+  const readFileSnapshot = dependencies.readFileSnapshot ?? defaultReadFileSnapshot;
 
   return function trellisExtension(pi: ExtensionAPI): void {
     let active: ActiveState | undefined;
     let activationGeneration = 0;
     let statusUpdateGeneration = 0;
+    const pendingFileChanges = new Map<string, {
+      state: ActiveState;
+      absolutePath: string;
+      path: string;
+      before: string | undefined;
+    }>();
+    const hintedStoryIds = new Set<string>();
 
     const emit = (content: string): void => {
       pi.sendMessage({ customType: "trellis", content, display: true });
@@ -77,6 +100,64 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
       },
     });
 
+    pi.on("tool_call", async (event, ctx) => {
+      if (event.toolName !== "edit" && event.toolName !== "write") return;
+      const state = active;
+      if (!state) return;
+      const input = event.input as { path?: unknown };
+      if (typeof input.path !== "string" || input.path.length === 0) return;
+      const absolutePath = normalizeFilePath(input.path, ctx.cwd);
+      try {
+        pendingFileChanges.set(event.toolCallId, {
+          state,
+          absolutePath,
+          path: projectPath(absolutePath, state.project.root),
+          before: await readFileSnapshot(absolutePath),
+        });
+      } catch {
+        pendingFileChanges.delete(event.toolCallId);
+      }
+    });
+
+    pi.on("tool_result", async (event, ctx) => {
+      if (event.toolName !== "edit" && event.toolName !== "write") return;
+      const pending = pendingFileChanges.get(event.toolCallId);
+      pendingFileChanges.delete(event.toolCallId);
+      if (!pending || event.isError || active !== pending.state) return;
+
+      let after: string | undefined;
+      try {
+        after = await readFileSnapshot(pending.absolutePath);
+      } catch {
+        return;
+      }
+      if (after === pending.before) return;
+
+      let result: SpecsForPathResult;
+      try {
+        result = await specsForPath(
+          pending.state.project.id,
+          pending.path,
+          ctx.signal,
+        );
+      } catch {
+        return;
+      }
+      if (active !== pending.state) return;
+
+      for (const story of selectUnhintedDoneStories(result.stories, hintedStoryIds)) {
+        hintedStoryIds.add(story.id);
+        pi.sendMessage(
+          {
+            customType: "trellis-file-hint",
+            content: formatFileHint(pending.path, story),
+            display: true,
+          },
+          { deliverAs: "nextTurn" },
+        );
+      }
+    });
+
     pi.on("before_agent_start", async (event, ctx) => {
       const state = active;
       if (!state) return undefined;
@@ -124,6 +205,17 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
 }
 
 export default createTrellisExtension();
+
+async function defaultReadFileSnapshot(path: string): Promise<string | undefined> {
+  try {
+    return await readFile(path, "utf8");
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
+      return undefined;
+    }
+    throw error;
+  }
+}
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);

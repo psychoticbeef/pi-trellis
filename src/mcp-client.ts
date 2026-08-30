@@ -14,6 +14,16 @@ export interface TrellisMcpClientOptions {
   timeoutMs?: number;
 }
 
+export interface StoryForPath {
+  id: string;
+  title: string;
+  status: string;
+}
+
+export interface SpecsForPathResult {
+  stories: StoryForPath[];
+}
+
 interface JsonRpcResponse {
   jsonrpc?: string;
   id?: number;
@@ -38,6 +48,23 @@ export class TrellisMcpClient {
   }
 
   async getOverview(projectId: string, signal?: AbortSignal): Promise<TrellisOverview> {
+    return parseOverview(await this.callTool(projectId, "get_overview", {}, signal));
+  }
+
+  async specsForPath(
+    projectId: string,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<SpecsForPathResult> {
+    return parseSpecsForPath(await this.callTool(projectId, "specs_for_path", { path }, signal));
+  }
+
+  private async callTool(
+    projectId: string,
+    toolName: string,
+    toolArguments: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<unknown> {
     const args = ["serve", "--project", projectId, "--board-addr", "off"];
     let child: ChildProcessWithoutNullStreams;
     try {
@@ -121,10 +148,10 @@ export class TrellisMcpClient {
       await Promise.race([initialize, abortPromise]);
       child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized", params: {} })}\n`);
       const raw = await Promise.race([
-        request("tools/call", { name: "get_overview", arguments: {} }),
+        request("tools/call", { name: toolName, arguments: toolArguments }),
         abortPromise,
       ]);
-      return parseOverview(raw);
+      return raw;
     } finally {
       lines.close();
       rejectPending(new TrellisMcpError("Trellis-MCP-Verbindung geschlossen"));
@@ -169,6 +196,47 @@ function parseOverview(raw: unknown): TrellisOverview {
     }
   }
   throw new TrellisMcpError("get_overview enthielt weder structuredContent noch Textinhalt");
+}
+
+function parseSpecsForPath(raw: unknown): SpecsForPathResult {
+  const value = parseStructuredOrText(raw, "specs_for_path");
+  if (typeof value !== "object" || value === null || !Array.isArray((value as Record<string, unknown>).stories)) {
+    throw new TrellisMcpError("specs_for_path lieferte keine Story-Liste");
+  }
+  const stories = (value as { stories: unknown[] }).stories.map((story, index) => {
+    if (typeof story !== "object" || story === null) {
+      throw new TrellisMcpError(`specs_for_path Story ${index + 1} ist ungültig`);
+    }
+    const candidate = story as Record<string, unknown>;
+    if (typeof candidate.id !== "string" || typeof candidate.title !== "string" || typeof candidate.status !== "string") {
+      throw new TrellisMcpError(`specs_for_path Story ${index + 1} enthält nicht id, title und status`);
+    }
+    return { id: candidate.id, title: candidate.title, status: candidate.status };
+  });
+  return { stories };
+}
+
+function parseStructuredOrText(raw: unknown, toolName: string): unknown {
+  if (typeof raw !== "object" || raw === null) {
+    throw new TrellisMcpError(`${toolName} lieferte kein Ergebnisobjekt`);
+  }
+  const result = raw as Record<string, unknown>;
+  if (typeof result.structuredContent === "object" && result.structuredContent !== null) {
+    return result.structuredContent;
+  }
+  if (Array.isArray(result.content)) {
+    const text = result.content.find((item) =>
+      typeof item === "object" && item !== null && (item as Record<string, unknown>).type === "text",
+    ) as Record<string, unknown> | undefined;
+    if (typeof text?.text === "string") {
+      try {
+        return JSON.parse(text.text) as unknown;
+      } catch (error) {
+        throw new TrellisMcpError(`${toolName} enthielt ungültiges JSON: ${messageOf(error)}`);
+      }
+    }
+  }
+  throw new TrellisMcpError(`${toolName} enthielt weder structuredContent noch Textinhalt`);
 }
 
 function messageOf(error: unknown): string {
