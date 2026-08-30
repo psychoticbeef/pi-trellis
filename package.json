@@ -1,0 +1,22 @@
+{
+  "name": "pi-trellis",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "lint": "tsc --noEmit",
+    "test": "npx vitest run --reporter=junit --outputFile=reports/tests.xml"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "file:/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent",
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  }
+}
