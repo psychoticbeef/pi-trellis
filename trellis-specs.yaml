@@ -8,6 +8,8 @@ project:
     test_cmd: npx vitest run --reporter=junit --outputFile=reports/tests.xml
     junit_glob: reports/*.xml
 glossary:
+    - term: Auto-Load
+      definition: Projektlokales automatisches Laden der Extension durch pi.
     - term: Board-Adresse
       definition: Konfigurierbare Live-Board-Basisadresse; Standard http://127.0.0.1:7420.
     - term: Dateihinweis
@@ -20,22 +22,25 @@ glossary:
       definition: Über package.json oder Konventionsverzeichnisse ladbares pi-Ressourcenpaket.
     - term: Statusline-Eintrag
       definition: Dezente aktuelle Anzeige der laufenden Story und ihrer Gates.
+    - term: Subagent-Rezept
+      definition: Projektlokale Markdown-Definition eines spezialisierten Agenten.
     - term: Trellis-Kontextblock
       definition: Pro User-Turn injizierte Trellis-Projektübersicht unter 1500 Zeichen.
     - term: Trellis-Modus
       definition: Aktivierte Trellis-Kontextinjektion einer pi-Sitzung.
 counters:
-    AS: 5
-    AT: 5
-    DD: 10
-    IT: 5
-    US: 5
-    UT: 10
+    AS: 6
+    AT: 6
+    DD: 13
+    IT: 6
+    US: 6
+    UT: 13
     ac:US-1: 4
     ac:US-2: 4
     ac:US-3: 4
     ac:US-4: 3
     ac:US-5: 4
+    ac:US-6: 4
 stories:
     - id: US-1
       kind: story
@@ -509,3 +514,126 @@ stories:
             tests:
                 - test/acceptance-init.test.ts::AT-5 Geführtes Projekt-Interview über den Slash-Command > AT-5 erfüllt Modus-Guard, Einzelinjektion, Längenlimit und Interview-Abschluss
             recorded_at: "2026-08-30T15:25:23Z"
+    - id: US-6
+      kind: story
+      title: Subagent-Rezepte und Auto-Load
+      body: Die Extension stellt drei projektlokale Subagent-Rezepte create-if-absent bereit, ergänzt /trellis:check um eine Agent-Tool-orientierte Prüfung mit Inline-Fallback und wird über committete Projekteinstellungen ohne -e automatisch durch pi geladen.
+      status: done
+      paths:
+        - .pi/settings.json
+        - .pi/agents
+        - src/agent-recipes.ts
+        - src/check-prompt.ts
+        - src/index.ts
+        - test/agent-recipes.test.ts
+        - test/check-command.test.ts
+        - test/feature6-acceptance.test.ts
+        - test/integration-recipes-check.test.ts
+        - test/settings-autoload.test.ts
+        - test/integration-package.test.ts
+      acceptance_criteria:
+        - id: US-6.AC-1
+          given: Der Trellis-Modus ist deaktiviert und mindestens eines der drei Subagent-Rezepte .pi/agents/spec-sync-check.md, .pi/agents/glossary-warden.md oder .pi/agents/pre-finish-review.md fehlt beziehungsweise existiert bereits.
+          when: Der User führt /trellis:on erfolgreich aus.
+          then: Die Extension legt jedes fehlende Subagent-Rezept im Format von @tintinweb/pi-subagents an und lässt jede bereits vorhandene Datei bytegenau unverändert.
+        - id: US-6.AC-2
+          given: Die drei Subagent-Rezepte sind vorhanden.
+          when: Ihre Aufgaben und Werkzeuggrenzen ausgewertet werden.
+          then: spec-sync-check liest Diff und betroffene Done-Bäume und meldet veraltete Spec-Knoten ausschließlich als Vorschlagsliste; glossary-warden prüft neue Specs und Code auf Terminologie-Drift gegen das Glossar; pre-finish-review prüft den Worktree-Diff anhand der Akzeptanzkriterien der Story als Checkliste.
+        - id: US-6.AC-3
+          given: Der Trellis-Modus ist aktiviert.
+          when: Der User führt /trellis:check aus.
+          then: Der Command injiziert genau einen Prompt, der das LLM anweist, spec-sync-check und glossary-warden über das Agent-Tool zu spawnen, sofern sie verfügbar sind, und andernfalls beide Prüfungen inline durchzuführen.
+        - id: US-6.AC-4
+          given: Das Repository ist ausgecheckt und als Projekt vertrauenswürdig freigegeben.
+          when: pi aus dem Repository mit pi --mode print und ohne -e gestartet wird.
+          then: Die committete .pi/settings.json lädt die Extension projektlokal automatisch, sodass ihre Trellis-Commands einschließlich /trellis:check registriert sind.
+      approved_content_hash: 507fba9b71687d348aa3edb964e50a722ad0bedff76c435ad7c32edc20f525e1
+      children:
+        - id: AS-6
+          kind: arch
+          title: Projektlokale Subagent-Rezepte und Extension-Auto-Load
+          body: Die bestehende TypeScript-pi-Extension ergänzt drei statische Markdown-Templates im Frontmatter-Format von @tintinweb/pi-subagents. Nach erfolgreicher /trellis:on-Aktivierung provisioniert ein injizierbarer Dateisystem-Port die Templates atomar mit exklusiver create-if-absent-Semantik unter .pi/agents und überschreibt niemals vorhandene Dateien. Ein statischer Check-Prompt und /trellis:check nutzen pi.sendUserMessage, verlangen bei verfügbarem Agent-Tool parallele Spawns von spec-sync-check und glossary-warden und beschreiben denselben Inline-Fallback. Eine committete .pi/settings.json referenziert aus dem relativ zu .pi aufgelösten extensions-Feld ../extensions/index.ts. Unit-, Integrations-, Acceptance- und echter pi-Print-Prozesstest sichern Inhalte, Verdrahtung und Auto-Load.
+          approved_content_hash: 5d028810e5d37798dc4d04d5c8431b1146cdbdc42a335d4bb653271b3a0475a4
+          approved_parent_hash: 507fba9b71687d348aa3edb964e50a722ad0bedff76c435ad7c32edc20f525e1
+          children:
+            - id: DD-11
+              kind: detail_design
+              title: Templates und create-if-absent-Provisionierung
+              body: src/agent-recipes.ts exportiert Dateinamen und unveränderliche Markdown-Inhalte für spec-sync-check, glossary-warden und pre-finish-review. Jedes Template besitzt YAML-Frontmatter mit description, ausschließlich read-only Werkzeugen read, grep, find und bash sowie einen präzisen System-Prompt. spec-sync-check liest den Worktree-Diff, ermittelt betroffene Done-Bäume über Trellis und gibt nur eine Vorschlagsliste veralteter Spec-Knoten aus; glossary-warden vergleicht neue Specs und Code mit dem Glossar; pre-finish-review erstellt aus Worktree-Diff und Story-Akzeptanzkriterien eine Checkliste. ensureAgentRecipes(cwd) erzeugt .pi/agents und öffnet jede Zieldatei exklusiv zur Neuerstellung; EEXIST gilt als Erfolg und bewirkt keinen Lese-/Schreibzyklus. /trellis:on ruft die Provisionierung erst nach erfolgreicher Aktivierung auf und meldet Provisionierungsfehler konkret, ohne vorhandene Dateien zu verändern.
+              approved_content_hash: 7a0763cb0536858419ba767b498d3753629944eddc1a4483329766346ca4880a
+              approved_parent_hash: 5d028810e5d37798dc4d04d5c8431b1146cdbdc42a335d4bb653271b3a0475a4
+              children:
+                - id: UT-11
+                  kind: unit_test
+                  title: UT-11 Rezeptformat, Rollen und create-if-absent
+                  body: Unit-Tests parsen Frontmatter und Body aller drei Templates, prüfen die read-only Werkzeugliste und jede geforderte Rolle. Dateisystemtests prüfen Neuanlage, Teilbestand, bytegenaue Erhaltung vorhandener Dateien, wiederholte Aufrufe und konkurrierendes EEXIST-Verhalten. Jeder Testname enthält UT-11.
+                  approved_content_hash: b93c3ce8f81e9f621161a8d8549650ca571e00a604cef6a64edb4089c1078b75
+                  approved_parent_hash: 7a0763cb0536858419ba767b498d3753629944eddc1a4483329766346ca4880a
+                  evidence:
+                    tests:
+                        - test/agent-recipes.test.ts::UT-11 Rezeptformat, Rollen und create-if-absent > UT-11 liefert gültige read-only Templates mit allen drei Rollen
+                        - test/agent-recipes.test.ts::UT-11 Rezeptformat, Rollen und create-if-absent > UT-11 legt nur fehlende Rezepte an und erhält Vorbestand bytegenau
+                    recorded_at: "2026-08-30T18:56:28Z"
+            - id: DD-12
+              kind: detail_design
+              title: Check-Prompt und Slash-Command
+              body: src/check-prompt.ts exportiert CHECK_PROMPT als unveränderlichen String. Er fordert das LLM auf, die Verfügbarkeit des Agent-Tools und beider Typen zu prüfen, spec-sync-check und glossary-warden bei Verfügbarkeit in einem gemeinsamen parallelen Tool-Turn zu spawnen, ihre Ergebnisse als Vorschläge zusammenzuführen und bei fehlendem Agent-Tool oder fehlendem Typ die entsprechenden Diff-/Done-Baum- und Glossarprüfungen inline auszuführen. src/index.ts registriert trellis:check. Der Handler verwendet denselben Aktivierungs-Guard wie trellis:init und sendet bei aktivem Trellis-Modus CHECK_PROMPT genau einmal über pi.sendUserMessage; ohne aktiven Modus verweist er auf /trellis:on.
+              approved_content_hash: 9f3a67e3e82847cf9266f80a2c200be445db7e353eb27108be8da0fdeb02c068
+              approved_parent_hash: 5d028810e5d37798dc4d04d5c8431b1146cdbdc42a335d4bb653271b3a0475a4
+              children:
+                - id: UT-12
+                  kind: unit_test
+                  title: UT-12 Check-Prompt und Command-Guard
+                  body: Unit-Tests prüfen die Pflichtinhalte Agent-Tool, spec-sync-check, glossary-warden, paralleler Spawn und vollständiger Inline-Fallback. Harness-Tests prüfen Registrierung, Modus-Guard, Hinweis auf /trellis:on und exakt einen Versand von CHECK_PROMPT nach Aktivierung. Jeder Testname enthält UT-12.
+                  approved_content_hash: 7f7b638889982448aae84475252e234821a69d8a0e97019f713a7b10b13986bc
+                  approved_parent_hash: 9f3a67e3e82847cf9266f80a2c200be445db7e353eb27108be8da0fdeb02c068
+                  evidence:
+                    tests:
+                        - test/check-command.test.ts::UT-12 Check-Prompt und Command-Guard > UT-12 beschreibt parallele Agent-Spawns und den vollständigen Inline-Fallback
+                        - test/check-command.test.ts::UT-12 Check-Prompt und Command-Guard > UT-12 schützt trellis:check mit dem Trellis-Modus und sendet exakt CHECK_PROMPT
+                    recorded_at: "2026-08-30T18:56:28Z"
+            - id: DD-13
+              kind: detail_design
+              title: Committete Projekteinstellungen für Auto-Load
+              body: '.pi/settings.json enthält gültiges JSON mit extensions: ["../extensions/index.ts"]. Der Pfad wird gemäß pi-Projekteinstellungen relativ zu .pi aufgelöst und lädt dadurch den bestehenden buildfreien Package-Entry. Ein statischer Test prüft Manifestform und Pfadauflösung. Ein Prozess-Test kopiert das Repository in ein temporäres vertrauenswürdig freigegebenes Projekt, startet pi --mode print ohne -e und lässt einen minimalen Prompt die registrierten Commands über die geladene Extension nachweisen; das Kommando erhält eine begrenzte Laufzeit und eine kontrollierte Modell-/Trust-Konfiguration.'
+              approved_content_hash: 4fbf88110686db5175380b5a2d9e7f774ce1110b48357638c317954d193ca2c4
+              approved_parent_hash: 5d028810e5d37798dc4d04d5c8431b1146cdbdc42a335d4bb653271b3a0475a4
+              children:
+                - id: UT-13
+                  kind: unit_test
+                  title: UT-13 Settings-Format und Extension-Pfad
+                  body: Unit-Tests parsen .pi/settings.json, prüfen das extensions-Array exakt auf ../extensions/index.ts und lösen den Eintrag relativ zu .pi auf extensions/index.ts auf. Jeder Testname enthält UT-13.
+                  approved_content_hash: e0e39ce8dd37971c3280f4e3a65d29edd28bd1743f496d30126c19f13563a4a4
+                  approved_parent_hash: 4fbf88110686db5175380b5a2d9e7f774ce1110b48357638c317954d193ca2c4
+                  evidence:
+                    tests:
+                        - test/settings-autoload.test.ts::UT-13 Settings-Format und Extension-Pfad > UT-13 lädt den Package-Entry relativ zu den Projekteinstellungen
+                    recorded_at: "2026-08-30T18:56:28Z"
+            - id: IT-6
+              kind: integration_test
+              title: IT-6 Aktivierung, Provisionierung und Check im Pi-Harness
+              body: Eine Integration-Suite registriert die Extension am Pi-Harness, aktiviert den Trellis-Modus mit Fake-MCP, prüft die drei angelegten Subagent-Rezepte und unveränderten Vorbestand, führt trellis:check aus und beobachtet genau eine User-Nachricht mit CHECK_PROMPT. Ein separater Prozess-Test startet pi --mode print aus einem temporären Projekt ohne -e und verifiziert projektlokales Auto-Load anhand der verfügbaren Trellis-Commands. Jeder Testname enthält IT-6.
+              approved_content_hash: 6b09d6ab2f1fcef7c86857df4ae0025c0b785f2da9b255a7109de85441af3e8b
+              approved_parent_hash: 5d028810e5d37798dc4d04d5c8431b1146cdbdc42a335d4bb653271b3a0475a4
+              evidence:
+                tests:
+                    - test/integration-recipes-check.test.ts::IT-6 Aktivierung, Provisionierung und Check im Pi-Harness > IT-6 verbindet Aktivierung, create-if-absent und Check-Prompt
+                    - test/settings-autoload.test.ts::AT-6 IT-6 Projektlokales Auto-Load im echten pi-Prozess > AT-6 IT-6 registriert alle Trellis-Commands ohne -e
+                recorded_at: "2026-08-30T18:56:28Z"
+        - id: AT-6
+          kind: acceptance_test
+          title: AT-6 Subagent-Rezepte, Check und Auto-Load
+          body: Eine Black-box-Suite aktiviert die Extension in einem temporären Projekt und prüft create-if-absent für alle drei Subagent-Rezepte einschließlich bytegenauer Erhaltung vorhandener Dateien und ihrer fachlichen Rollen. Sie führt /trellis:check aus und validiert die Agent-Tool-Anweisung mit Inline-Fallback. Ein Prozess-Test startet pi aus einem vertrauenswürdig freigegebenen Projekt mit --mode print ohne -e und weist anhand der registrierten Trellis-Commands nach, dass .pi/settings.json die Extension automatisch lädt. Der Testname enthält AT-6.
+          covers:
+            - US-6.AC-1
+            - US-6.AC-2
+            - US-6.AC-3
+            - US-6.AC-4
+          approved_content_hash: e4d1f1f5fd05675f72bce4170d972a522aa6ded1f69061b508f2fada20fd6d7a
+          approved_parent_hash: 507fba9b71687d348aa3edb964e50a722ad0bedff76c435ad7c32edc20f525e1
+          evidence:
+            tests:
+                - test/feature6-acceptance.test.ts::AT-6 Subagent-Rezepte, Check und Auto-Load > AT-6 erfüllt create-if-absent, definierte Rollen, Check-Fallback und Auto-Load
+                - test/settings-autoload.test.ts::AT-6 IT-6 Projektlokales Auto-Load im echten pi-Prozess > AT-6 IT-6 registriert alle Trellis-Commands ohne -e
+            recorded_at: "2026-08-30T18:56:28Z"

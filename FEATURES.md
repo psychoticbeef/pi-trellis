@@ -9,15 +9,18 @@
 - **US-3** — Spec-aware Dateihinweise
 - **US-4** — Repository als pi-Package paketieren
 - **US-5** — Geführtes Projekt-Interview über /trellis:init
+- **US-6** — Subagent-Rezepte und Auto-Load
 
 ## Glossary
 
+- **Auto-Load** — Projektlokales automatisches Laden der Extension durch pi.
 - **Board-Adresse** — Konfigurierbare Live-Board-Basisadresse; Standard http://127.0.0.1:7420.
 - **Dateihinweis** — Einmal pro Done-Story und Sitzung eingereihter LLM-Kontexthinweis nach einer zugehörigen Dateiänderung.
 - **Interview-Prompt** — Strukturierte LLM-Anleitung für das geführte Projekt-Interview.
 - **Kanban-Zusammenfassung** — UI-only Übersicht über Story-Zähler, aktive Arbeit und Risiken.
 - **pi-Package** — Über package.json oder Konventionsverzeichnisse ladbares pi-Ressourcenpaket.
 - **Statusline-Eintrag** — Dezente aktuelle Anzeige der laufenden Story und ihrer Gates.
+- **Subagent-Rezept** — Projektlokale Markdown-Definition eines spezialisierten Agenten.
 - **Trellis-Kontextblock** — Pro User-Turn injizierte Trellis-Projektübersicht unter 1500 Zeichen.
 - **Trellis-Modus** — Aktivierte Trellis-Kontextinjektion einer pi-Sitzung.
 
