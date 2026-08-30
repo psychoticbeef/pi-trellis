@@ -12,6 +12,8 @@ glossary:
       definition: Konfigurierbare Live-Board-Basisadresse; Standard http://127.0.0.1:7420.
     - term: Dateihinweis
       definition: Einmal pro Done-Story und Sitzung eingereihter LLM-Kontexthinweis nach einer zugehörigen Dateiänderung.
+    - term: Interview-Prompt
+      definition: Strukturierte LLM-Anleitung für das geführte Projekt-Interview.
     - term: Kanban-Zusammenfassung
       definition: UI-only Übersicht über Story-Zähler, aktive Arbeit und Risiken.
     - term: pi-Package
@@ -23,16 +25,17 @@ glossary:
     - term: Trellis-Modus
       definition: Aktivierte Trellis-Kontextinjektion einer pi-Sitzung.
 counters:
-    AS: 4
-    AT: 4
-    DD: 8
-    IT: 4
-    US: 4
-    UT: 8
+    AS: 5
+    AT: 5
+    DD: 10
+    IT: 5
+    US: 5
+    UT: 10
     ac:US-1: 4
     ac:US-2: 4
     ac:US-3: 4
     ac:US-4: 3
+    ac:US-5: 4
 stories:
     - id: US-1
       kind: story
@@ -393,8 +396,8 @@ stories:
             - id: IT-4
               kind: integration_test
               title: IT-4 TypeScript-Package-Entry lädt die Extension
-              body: Eine Integration-Suite importiert extensions/index.ts ohne vorherigen Build, vergleicht dessen Default-Export mit der bestehenden Extension-Factory und registriert ihn an einem Pi-Harness. Sie prüft, dass die drei Commands verfügbar sind. Der Testname enthält IT-4.
-              approved_content_hash: 57536477d4771941597644e9a901f645472b8812ed7ee730989b93aac3574751
+              body: Eine Integration-Suite importiert extensions/index.ts ohne vorherigen Build, vergleicht dessen Default-Export mit der bestehenden Extension-Factory und registriert ihn an einem Pi-Harness. Sie prüft, dass /trellis:on, /trellis:off, /trellis:status und /trellis:init verfügbar sind. Der Testname enthält IT-4.
+              approved_content_hash: 8ccacc3650457025e3c5fae7123f730fd07e8800a4102246dba54abb815acd2d
               approved_parent_hash: 9377d1cd161d7dcd791453287b1e377261e6dbec94d6e2064f5eee65302f2053
               evidence:
                 tests:
@@ -414,3 +417,95 @@ stories:
             tests:
                 - test/acceptance-package.test.ts::AT-4 Installierbares und dokumentiertes pi-Package > AT-4 liefert ein buildfreies Package mit Peer-Metadaten und vollständigem README
             recorded_at: "2026-08-30T15:07:59Z"
+    - id: US-5
+      kind: story
+      title: Geführtes Projekt-Interview über /trellis:init
+      body: Der Slash-Command /trellis:init erfordert einen aktiven Trellis-Modus und injiziert über pi.sendUserMessage einen im Code hinterlegten Interview-Prompt. Dieser führt das LLM schrittweise durch Projektbeschreibung, bestätigte Story-Vorschläge mit Given/When/Then-Akzeptanzkriterien, Querschnittsthemen, Glossar-Grundstock sowie abschließendes approve_tree und Refinement.
+      status: done
+      acceptance_criteria:
+        - id: US-5.AC-1
+          given: Der Trellis-Modus ist deaktiviert.
+          when: Der User führt /trellis:init aus.
+          then: Es wird kein Interview gestartet und der User erhält die konkrete Fehlermeldung, dass /trellis:init einen aktiven Trellis-Modus erfordert und zuerst /trellis:on auszuführen ist.
+        - id: US-5.AC-2
+          given: Der Trellis-Modus ist aktiviert.
+          when: Der User führt /trellis:init aus.
+          then: Der Command injiziert über pi.sendUserMessage genau einen im Code hinterlegten, strukturierten Interview-Prompt mit weniger als 2500 Zeichen.
+        - id: US-5.AC-3
+          given: Der Interview-Prompt wurde injiziert.
+          when: Das LLM das Projekt-Interview durchführt.
+          then: Es erarbeitet schrittweise mit dem User die Projektbeschreibung, schlägt anschließend 2–3 erste Stories mit Given/When/Then-Akzeptanzkriterien vor und legt sie erst nach ausdrücklicher Bestätigung an; danach erarbeitet es Querschnittsthemen als cross_cutting Specs und einen ultra-kurzen Glossar-Grundstock.
+        - id: US-5.AC-4
+          given: Der User hat die vorgeschlagenen Inhalte bestätigt und die Spec-Bäume wurden angelegt.
+          when: Das Interview abgeschlossen wird.
+          then: Der Interview-Prompt weist das LLM abschließend an, die vollständigen Bäume zu lesen, sie mit aktuellen Hashes via approve_tree zu approven und die Stories nach erfolgreicher Prüfung zu refinen.
+      approved_content_hash: a92281da9969b41ef36601613ff964c3ed5b829fa29edecf46a8ebc05b9c35e1
+      children:
+        - id: AS-5
+          kind: arch
+          title: Slash-Command mit statischem Interview-Prompt
+          body: 'Die TypeScript-pi-Extension exportiert einen statischen Interview-Prompt aus einem eigenen Modul und registriert /trellis:init neben den bestehenden Commands. Der Handler nutzt ausschließlich den In-Memory-Aktivierungszustand des Trellis-Modus: ohne aktiven Zustand sendet er über die vorhandene Trellis-Ausgabe eine konkrete Anleitung zu /trellis:on; mit aktivem Zustand übergibt er den Interview-Prompt genau einmal als String an pi.sendUserMessage. Der Prompt bleibt unter 2500 Zeichen und instruiert das LLM zu einem schrittweisen, bestätigungsgebundenen Trellis-Projekt-Interview einschließlich set_description, 2–3 Story-Vorschlägen mit Given/When/Then-Akzeptanzkriterien, cross_cutting Specs, ultra-kurzem Glossar-Grundstock, get_tree, approve_tree und Refinement. Unit-, Integrations- und Acceptance-Tests sichern Inhalt und Verdrahtung.'
+          approved_content_hash: c1dea466cbaccf25b4b2710374520fa23ba2c0f1b5a2bcdd0c6191116ac15f25
+          approved_parent_hash: a92281da9969b41ef36601613ff964c3ed5b829fa29edecf46a8ebc05b9c35e1
+          children:
+            - id: DD-10
+              kind: detail_design
+              title: Aktivierungsgeschützter init-Command
+              body: src/index.ts registriert trellis:init mit einer knappen Beschreibung. Der Handler prüft den bestehenden active-Zustand. Ohne aktiven Trellis-Modus ruft er emit mit einer konkreten Fehlermeldung auf, die /trellis:on nennt, und beendet sich ohne pi.sendUserMessage. Mit aktivem Zustand ruft er pi.sendUserMessage(INTERVIEW_PROMPT) genau einmal auf. Er führt selbst keine Trellis-Mutationen aus; diese bleiben Aufgabe des durch den Interview-Prompt angeleiteten LLM.
+              approved_content_hash: 261f7315e4961f203d5b124e3cca039ad73ef1676e4ea6aee93df262ab1b30cb
+              approved_parent_hash: c1dea466cbaccf25b4b2710374520fa23ba2c0f1b5a2bcdd0c6191116ac15f25
+              children:
+                - id: UT-10
+                  kind: unit_test
+                  title: UT-10 Guard und Nachrichtenversand des init-Commands
+                  body: 'Unit-Tests registrieren die Extension am Pi-Harness und prüfen: trellis:init ist vorhanden; im deaktivierten Trellis-Modus wird eine konkrete Meldung mit Trellis-Modus und /trellis:on ausgegeben und keine User-Nachricht gesendet; nach trellis:on wird exakt INTERVIEW_PROMPT als einzige User-Nachricht gesendet. Jeder Testname enthält UT-10.'
+                  approved_content_hash: e231546c27cd0ed173bf17daf5709174703c08c2c45bb075e9067a318727880b
+                  approved_parent_hash: 261f7315e4961f203d5b124e3cca039ad73ef1676e4ea6aee93df262ab1b30cb
+                  evidence:
+                    tests:
+                        - test/init-command.test.ts::UT-10 Guard und Nachrichtenversand des init-Commands > UT-10 registriert trellis:init und weist ohne Trellis-Modus konkret auf trellis:on hin
+                        - test/init-command.test.ts::UT-10 Guard und Nachrichtenversand des init-Commands > UT-10 sendet nach Aktivierung exakt einen Interview-Prompt
+                    recorded_at: "2026-08-30T15:25:23Z"
+            - id: DD-9
+              kind: detail_design
+              title: Interview-Prompt als testbares Template
+              body: 'src/init-prompt.ts exportiert den unveränderlichen String INTERVIEW_PROMPT. Er benennt das geführte Vorgehen in klaren Schritten: Projektbeschreibung mit set_description; Vorschlag von 2–3 Stories samt Given/When/Then-Akzeptanzkriterien vor jeder Anlage; Querschnittsthemen als cross_cutting Specs; ultra-kurzer Glossar-Grundstock; abschließend vollständige Bäume per get_tree lesen, mit aktuellen Hashes via approve_tree approven und danach refinen. Der Text fordert Rückfragen und ausdrückliche User-Bestätigung vor dem Anlegen und hat weniger als 2500 JavaScript-Zeichen.'
+              approved_content_hash: 08d4000516abe2a36aee749ac8e335cdec640bdae0f10a71161abef2d211c9e6
+              approved_parent_hash: c1dea466cbaccf25b4b2710374520fa23ba2c0f1b5a2bcdd0c6191116ac15f25
+              children:
+                - id: UT-9
+                  kind: unit_test
+                  title: UT-9 Längenlimit und Pflichtbausteine des Interview-Prompts
+                  body: Unit-Tests importieren INTERVIEW_PROMPT und prüfen weniger als 2500 Zeichen sowie die Pflichtbausteine set_description, 2–3 Stories, Given/When/Then, ausdrückliche Bestätigung vor Anlage, cross_cutting, Glossar, get_tree, approve_tree und refine. Jeder Testname enthält UT-9.
+                  approved_content_hash: f54db0fc3857b671e3ff4ec01973240b69d6362fcf8989ed087ae72e2e62619d
+                  approved_parent_hash: 08d4000516abe2a36aee749ac8e335cdec640bdae0f10a71161abef2d211c9e6
+                  evidence:
+                    tests:
+                        - test/init-prompt.test.ts::UT-9 Längenlimit und Pflichtbausteine des Interview-Prompts > UT-9 bleibt unter 2500 Zeichen
+                        - test/init-prompt.test.ts::UT-9 Längenlimit und Pflichtbausteine des Interview-Prompts > UT-9 enthält den bestätigungsgebundenen Interview-Ablauf
+                    recorded_at: "2026-08-30T15:25:23Z"
+            - id: IT-5
+              kind: integration_test
+              title: IT-5 Aktivierung und init-Command im Pi-Harness
+              body: Eine Integration-Suite aktiviert den Trellis-Modus über trellis:on mit Projektfindung und Overview-Abfrage, führt danach trellis:init aus und beobachtet am Pi-Harness genau eine durch pi.sendUserMessage ausgelöste User-Nachricht mit dem exportierten Interview-Prompt. Vor der Aktivierung bleibt derselbe Aufruf ohne User-Nachricht. Der Testname enthält IT-5.
+              approved_content_hash: 4d510a619de18d3717ab18b0560cefa56333885e91c5dc3d9255ee7b2e4ac328
+              approved_parent_hash: c1dea466cbaccf25b4b2710374520fa23ba2c0f1b5a2bcdd0c6191116ac15f25
+              evidence:
+                tests:
+                    - test/integration-init.test.ts::IT-5 Aktivierung und init-Command im Pi-Harness > IT-5 sendet den Interview-Prompt ausschließlich nach erfolgreicher Aktivierung
+                recorded_at: "2026-08-30T15:25:23Z"
+        - id: AT-5
+          kind: acceptance_test
+          title: AT-5 Geführtes Projekt-Interview über den Slash-Command
+          body: Eine Black-box-Suite registriert die Extension an einem Pi-Harness. Sie prüft, dass /trellis:init bei deaktiviertem Trellis-Modus eine konkrete Fehlermeldung ausgibt und keine User-Nachricht sendet, nach erfolgreicher Aktivierung genau einen Interview-Prompt via pi.sendUserMessage sendet und dieser unter 2500 Zeichen alle Schritte bis approve_tree und Refinement enthält. Der Testname enthält AT-5.
+          covers:
+            - US-5.AC-1
+            - US-5.AC-2
+            - US-5.AC-3
+            - US-5.AC-4
+          approved_content_hash: 3a1b35ab446f5baf6cc9ea1423b4ddf492617847fb1add5115a833bdea6639de
+          approved_parent_hash: a92281da9969b41ef36601613ff964c3ed5b829fa29edecf46a8ebc05b9c35e1
+          evidence:
+            tests:
+                - test/acceptance-init.test.ts::AT-5 Geführtes Projekt-Interview über den Slash-Command > AT-5 erfüllt Modus-Guard, Einzelinjektion, Längenlimit und Interview-Abschluss
+            recorded_at: "2026-08-30T15:25:23Z"
