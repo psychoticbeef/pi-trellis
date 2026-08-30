@@ -1,0 +1,416 @@
+trellis_export: 1
+project:
+    name: pi-trellis
+    description: 'pi extension integrating trellis: slash commands, live board link, spec-aware file hints, guided refinement, subagent recipes.'
+    base_branch: develop
+    release_branch: main
+    lint_cmd: npx tsc --noEmit
+    test_cmd: npx vitest run --reporter=junit --outputFile=reports/tests.xml
+    junit_glob: reports/*.xml
+glossary:
+    - term: Board-Adresse
+      definition: Konfigurierbare Live-Board-Basisadresse; Standard http://127.0.0.1:7420.
+    - term: Dateihinweis
+      definition: Einmal pro Done-Story und Sitzung eingereihter LLM-Kontexthinweis nach einer zugehörigen Dateiänderung.
+    - term: Kanban-Zusammenfassung
+      definition: UI-only Übersicht über Story-Zähler, aktive Arbeit und Risiken.
+    - term: pi-Package
+      definition: Über package.json oder Konventionsverzeichnisse ladbares pi-Ressourcenpaket.
+    - term: Statusline-Eintrag
+      definition: Dezente aktuelle Anzeige der laufenden Story und ihrer Gates.
+    - term: Trellis-Kontextblock
+      definition: Pro User-Turn injizierte Trellis-Projektübersicht unter 1500 Zeichen.
+    - term: Trellis-Modus
+      definition: Aktivierte Trellis-Kontextinjektion einer pi-Sitzung.
+counters:
+    AS: 4
+    AT: 4
+    DD: 8
+    IT: 4
+    US: 4
+    UT: 8
+    ac:US-1: 4
+    ac:US-2: 4
+    ac:US-3: 4
+    ac:US-4: 3
+stories:
+    - id: US-1
+      kind: story
+      title: Trellis-Modus per Slash-Command steuern
+      body: Eine TypeScript-pi-Extension erkennt das Trellis-Projekt aus AGENTS.md, validiert den Trellis-MCP-Server und aktiviert mit /trellis:on den Trellis-Modus. Sie zeigt den Link aus der Board-Adresse und injiziert danach je User-Turn einen Trellis-Kontextblock. /trellis:off deaktiviert ihn.
+      status: done
+      acceptance_criteria:
+        - id: US-1.AC-1
+          given: 'Im aktuellen Projektbaum existiert eine AGENTS.md mit trellis-project: <id>, und der Trellis-MCP-Server ist erreichbar.'
+          when: Der User führt /trellis:on aus.
+          then: Die Projekt-ID wird erkannt, der Trellis-Modus wird aktiviert und der Projektlink auf Basis der Board-Adresse ausgegeben; deren Standard ist http://127.0.0.1:7420.
+        - id: US-1.AC-2
+          given: Der Trellis-Modus ist aktiviert.
+          when: Ein nachfolgender User-Turn verarbeitet wird.
+          then: Ein aktueller Trellis-Kontextblock mit weniger als 1500 Zeichen wird injiziert; er enthält Description, Glossar, Kanban-Zähler je Status, die in_progress-Story einschließlich Worktree-Pfad und stale Nodes.
+        - id: US-1.AC-3
+          given: Keine gültige trellis-project-Angabe gefunden wird oder der Trellis-MCP-Server nicht erreichbar ist.
+          when: Der User führt /trellis:on aus.
+          then: Der Trellis-Modus bleibt deaktiviert, der User erhält eine konkrete Fehlermeldung zur Ursache, und es wird kein Projektlink als verfügbar ausgegeben.
+        - id: US-1.AC-4
+          given: Der Trellis-Modus ist aktiviert.
+          when: Der User führt /trellis:off aus.
+          then: Der Trellis-Modus wird deaktiviert, die Deaktivierung wird bestätigt, und ab dem nächsten User-Turn wird kein Trellis-Kontextblock mehr injiziert.
+      approved_content_hash: 0b89b4203e7d47f677657e3b35aae174fe336e3a3b56142deabd8fcb999ea682
+      children:
+        - id: AS-1
+          kind: arch
+          title: TypeScript-pi-Extension für den Trellis-Modus
+          body: Die Extension exportiert eine TypeScript-Factory für ExtensionAPI. Sie registriert /trellis:on, /trellis:off und before_agent_start. Ein Config-Port sucht von ctx.cwd aufwärts AGENTS.md, liest trellis-project sowie eine konfigurierbare Board-Adresse mit Standard http://127.0.0.1:7420. Ein MCP-Port startet pro Abfrage einen eigenen stdio-Client mit trellis serve --project <id> --board-addr off, führt JSON-RPC initialize aus und ruft get_overview über tools/call auf. /trellis:on setzt den sitzungsinternen Trellis-Modus erst nach erfolgreicher Erkennung und MCP-Abfrage und gibt /p/<id>/ relativ zur Board-Adresse aus. before_agent_start lädt je User-Turn den aktuellen Overview, formatiert einen Trellis-Kontextblock mit hartem Limit < 1500 Zeichen und hängt ihn an event.systemPrompt; /trellis:off löscht den aktiven Zustand. Abhängigkeiten auf Dateisystem, MCP-Prozess, Umgebung und UI werden injizierbar gehalten; die Factory startet keine langlebige Ressource.
+          approved_content_hash: a5bfc2efc1b8527fbf36b51247a9081c38b1099d6e3e31589d98a973ccf7b951
+          approved_parent_hash: 0b89b4203e7d47f677657e3b35aae174fe336e3a3b56142deabd8fcb999ea682
+          children:
+            - id: DD-1
+              kind: detail_design
+              title: Projektfindung und atomare Aktivierung
+              body: 'src/config.ts implementiert findTrellisProject(cwd): aufwärts gerichtete, begrenzte Suche nach AGENTS.md, Parsing genau einer Zeile trellis-project: <id> sowie Normalisierung der Board-Adresse aus TRELLIS_BOARD_ADDRESS oder dem Standard http://127.0.0.1:7420. buildBoardUrl erzeugt mit URL und kodierter ID /p/<id>/. src/mcp-client.ts kapselt einen pro Abfrage gestarteten Prozess trellis serve --project <id> --board-addr off, tauscht zeilenbegrenzte JSON-RPC-Nachrichten initialize, notifications/initialized und tools/call für get_overview aus und beendet den Prozess auch bei Timeout, Abbruch oder Protokollfehler. src/index.ts hält den Trellis-Modus zunächst aus; /trellis:on baut alle Werte lokal auf und übernimmt den Zustand erst nach erfolgreicher Overview-Antwort. Getrennte Fehler für fehlende AGENTS.md-Angabe, Start-, Timeout-, Protokoll- und Toolfehler werden ohne verfügbaren Projektlink gemeldet.'
+              approved_content_hash: 8d6d52ea47465d58258c9a7bdb4812c9664a6ef013b2020561b85e9339497e1e
+              approved_parent_hash: a5bfc2efc1b8527fbf36b51247a9081c38b1099d6e3e31589d98a973ccf7b951
+              children:
+                - id: UT-1
+                  kind: unit_test
+                  title: Config, URL und Aktivierungszustand
+                  body: 'Unit-Tests prüfen AGENTS.md-Aufwärtssuche und trellis-project-Parsing, Board-Adresse-Standard und Override, URL-Normalisierung mit abschließendem /p/<id>/ sowie atomaren Trellis-Modus: erst nach erfolgreichem get_overview aktiv, bei jeder Erkennungs- oder MCP-Fehlerklasse aus und ohne Projektlink. Der MCP-Client wird mit Fake-Prozess auf exakte Argumente, JSON-RPC-Sequenz, Timeout und sicheres Beenden geprüft; Umgebung, Dateisystem und UI sind Fakes. Der Testname enthält die ID dieses unit_test.'
+                  approved_content_hash: 681dcdd5bdec19598ebaa9cd80ea25ae9a0c45b235b970bc3879562a475b1ad1
+                  approved_parent_hash: 8d6d52ea47465d58258c9a7bdb4812c9664a6ef013b2020561b85e9339497e1e
+                  evidence:
+                    tests:
+                        - test/config-and-mcp.test.ts::UT-1 Config, URL und MCP-Client > UT-1 findet trellis-project aufwärts und baut Default- sowie Override-URLs
+                        - test/config-and-mcp.test.ts::UT-1 Config, URL und MCP-Client > UT-1 lehnt fehlende und mehrdeutige Projektangaben konkret ab
+                        - test/config-and-mcp.test.ts::UT-1 Config, URL und MCP-Client > UT-1 sendet die exakte MCP-JSON-RPC-Sequenz mit den geforderten Spawn-Argumenten
+                        - test/config-and-mcp.test.ts::UT-1 Config, URL und MCP-Client > UT-1 meldet einen nicht startbaren MCP-Prozess konkret
+                        - test/config-and-mcp.test.ts::UT-1 Config, URL und MCP-Client > UT-1 beendet eine bereits abgebrochene MCP-Anfrage sofort
+                        - test/config-and-mcp.test.ts::UT-1 Config, URL und MCP-Client > UT-1 beendet eine hängende MCP-Anfrage per Timeout
+                    recorded_at: "2026-08-30T14:35:34Z"
+            - id: DD-2
+              kind: detail_design
+              title: Begrenzte Kontextformatierung und Deaktivierung
+              body: src/context.ts normalisiert Overview-Daten und erzeugt einen Trellis-Kontextblock mit den stabilen Überschriften Description, Glossar, Kanban, in_progress und stale. Kanban zählt Stories je geliefertem Status; in_progress enthält ID, Titel und Worktree-Pfad oder '-' bei keinem Eintrag. Der Formatter normalisiert Leerraum, kürzt Feldwerte deterministisch und markiert ausgelassene Listeneinträge mit …(+N), sodass block.length stets < 1500 bleibt und jeder Pflichtabschnitt erhalten bleibt. Der before_agent_start-Handler fragt bei aktivem Trellis-Modus pro User-Turn frisch über den MCP-Port ab und hängt genau einen Block an den System-Prompt. /trellis:off löscht Zustand und bestätigt; danach liefert der Hook keine Änderung.
+              approved_content_hash: 145da247a5e53413595cc055e91860478d332364d5e024e4accbd237cbd63a12
+              approved_parent_hash: a5bfc2efc1b8527fbf36b51247a9081c38b1099d6e3e31589d98a973ccf7b951
+              children:
+                - id: UT-2
+                  kind: unit_test
+                  title: Kontextlimit, Inhalte und Off-Semantik
+                  body: Tabellengetriebene Unit-Tests speisen leere, normale und extrem große Overviews ein. Jeder Trellis-Kontextblock enthält Description, Glossar, Kanban, in_progress mit Worktree-Pfad und stale, bleibt gemäß JavaScript string.length < 1500 und kürzt deterministisch. Hook-Tests prüfen genau eine frische MCP-Abfrage und Injektion je aktivem User-Turn sowie nach /trellis:off weder MCP-Abfrage noch Injektion. Der Testname enthält die ID dieses unit_test.
+                  approved_content_hash: 060404874886e20c7bcc6fcfb7011c6077566498d3088cc1a74055bbdb2b29a3
+                  approved_parent_hash: 145da247a5e53413595cc055e91860478d332364d5e024e4accbd237cbd63a12
+                  evidence:
+                    tests:
+                        - test/context.test.ts::UT-2 Trellis-Kontextblock und Off-Grundlagen > UT-2 enthält alle Pflichtabschnitte und Kanban-Zähler
+                        - test/context.test.ts::UT-2 Trellis-Kontextblock und Off-Grundlagen > UT-2 bleibt mit extrem großen Daten deterministisch unter 1500 Zeichen
+                        - test/context.test.ts::UT-2 Trellis-Kontextblock und Off-Grundlagen > UT-2 bildet leere Overview-Felder explizit ab
+                        - test/context.test.ts::UT-2 Trellis-Kontextblock und Off-Grundlagen > UT-2 fragt pro aktivem User-Turn frisch ab und nach Off nicht mehr
+                        - test/context.test.ts::UT-2 Trellis-Kontextblock und Off-Grundlagen > UT-2 injiziert bei Refresh-Fehlern keinen veralteten Overview
+                        - test/context.test.ts::UT-2 Trellis-Kontextblock und Off-Grundlagen > UT-2 verwirft eine laufende Injektion wenn Off dazwischen ausgeführt wird
+                    recorded_at: "2026-08-30T14:35:34Z"
+            - id: IT-1
+              kind: integration_test
+              title: Pi-Hooks mit Trellis-MCP-Transport
+              body: Ein Integrations-Test lädt die TypeScript-pi-Extension über einen ExtensionAPI-Testadapter in einem temporären Projekt mit AGENTS.md. Ein Fake-Prozess für trellis serve --project <id> --board-addr off beantwortet JSON-RPC initialize und tools/call get_overview über stdio. Der Test führt /trellis:on, before_agent_start und /trellis:off aus und prüft Zusammenspiel von Trellis-Modus, Board-Adresse, Projektlink und Trellis-Kontextblock einschließlich Worktree-Pfad. Fehlerfälle nutzen einen nicht startbaren beziehungsweise fehlschlagenden MCP-Prozess. Der Testname enthält die ID dieses integration_test.
+              approved_content_hash: 4ddda69f01c54191701ae53fb3275513c7574853ff2742c1c8d28da414b95774
+              approved_parent_hash: a5bfc2efc1b8527fbf36b51247a9081c38b1099d6e3e31589d98a973ccf7b951
+              evidence:
+                tests:
+                    - test/integration.test.ts::IT-1 Pi-Extension mit MCP-stdio > IT-1 verbindet Commands, echten stdio-Austausch, Hook und Deaktivierung
+                recorded_at: "2026-08-30T14:35:34Z"
+        - id: AT-1
+          kind: acceptance_test
+          title: Trellis-Modus über Commands und User-Turns
+          body: 'Eine Black-box-Suite lädt die TypeScript-pi-Extension mit kontrollierter Board-Adresse und einem Fake-Trellis-MCP-Server. Sie prüft: /trellis:on erkennt die AGENTS.md-Projekt-ID, validiert MCP und zeigt den Projektlink; der nächste User-Turn erhält einen aktuellen Trellis-Kontextblock mit allen geforderten Abschnitten und Stringlänge < 1500; fehlende Projekt-ID und MCP-Ausfall lassen den Trellis-Modus aus und melden die konkrete Ursache ohne verfügbaren Link; /trellis:off bestätigt und verhindert weitere Injektion. Der Testname enthält die ID dieses acceptance_test.'
+          covers:
+            - US-1.AC-1
+            - US-1.AC-2
+            - US-1.AC-3
+            - US-1.AC-4
+          approved_content_hash: 3d8b0b69ce8135e4add4370e8415794dd4c98790eeb9a0420745a22ff1178efa
+          approved_parent_hash: 0b89b4203e7d47f677657e3b35aae174fe336e3a3b56142deabd8fcb999ea682
+          evidence:
+            tests:
+                - test/acceptance.test.ts::AT-1 Trellis-Modus Acceptance > AT-1 erfüllt Aktivierung, Kontextlimit, Fehlerverhalten und Deaktivierung
+            recorded_at: "2026-08-30T14:35:34Z"
+    - id: US-2
+      kind: story
+      title: Trellis-Status in Terminal und Statusline
+      body: Die TypeScript-pi-Extension ergänzt /trellis:status um eine reine UI-Kanban-Zusammenfassung ohne LLM-Turn. Im aktiven Trellis-Modus zeigt und aktualisiert sie außerdem einen Statusline-Eintrag für laufende Story und Gates, einschließlich eines erkennbaren Fehlerzustands bei nicht erreichbarem Trellis-MCP-Server.
+      status: done
+      acceptance_criteria:
+        - id: US-2.AC-1
+          given: Ein Trellis-Projekt ist konfiguriert und der Trellis-MCP-Server ist erreichbar.
+          when: Der User führt /trellis:status aus.
+          then: Ausschließlich als Terminal-UI erscheint eine kompakte Kanban-Zusammenfassung mit Kanban-Zählern je Status, in_progress-Story samt Worktree-Pfad, stale Nodes und Storys mit blockierten Gates; es wird kein LLM-Turn ausgelöst und keine Nachricht in den LLM-Kontext geschrieben.
+        - id: US-2.AC-2
+          given: Kanban-Bereiche sind leer, keine Story ist in_progress, oder Projekt beziehungsweise Trellis-MCP-Server ist nicht verfügbar.
+          when: Der User führt /trellis:status aus.
+          then: Leere Bereiche werden eindeutig mit Null beziehungsweise none dargestellt oder eine konkrete UI-Fehlermeldung wird ausgegeben, weiterhin ohne LLM-Turn.
+        - id: US-2.AC-3
+          given: Der Trellis-Modus ist aktiv.
+          when: Er aktiviert wird oder ein Turn endet.
+          then: 'Der dezente Statusline-Eintrag wird aus aktuellen Trellis-Daten gesetzt beziehungsweise aktualisiert und zeigt die laufende Story sowie offene oder blockierte Gates; ist der Trellis-MCP-Server beim Update nicht erreichbar, zeigt er erkennbar trellis: unreachable statt zu verschwinden oder stale Daten zu zeigen.'
+        - id: US-2.AC-4
+          given: Der Trellis-Modus ist aktiv und ein Statusline-Eintrag wird angezeigt.
+          when: Der User führt /trellis:off aus.
+          then: Der Statusline-Eintrag wird entfernt und nach weiteren Turns nicht erneut aktualisiert.
+      approved_content_hash: 17113f01288ae0ff129811cd734d99fda1974cc6231aff62763a15b7e1d1fff1
+      children:
+        - id: AS-2
+          kind: arch
+          title: UI-only Statusdarstellung der Trellis-Extension
+          body: 'Die bestehende TypeScript-pi-Extension aus US-1 wird um /trellis:status, einen reinen Formatter für die Kanban-Zusammenfassung und einen turn_end-Handler für den Statusline-Eintrag erweitert. /trellis:status entdeckt das Projekt unabhängig vom Trellis-Modus, ruft get_overview über den bestehenden MCP-Port auf und schreibt Erfolg oder Fehler ausschließlich mit ctx.ui.notify; pi.sendMessage, pi.sendUserMessage und Agent-Trigger werden nicht verwendet. Bei erfolgreichem /trellis:on setzt ctx.ui.setStatus den initialen Statusline-Eintrag. Solange der Trellis-Modus aktiv bleibt, lädt turn_end einen frischen Overview und aktualisiert denselben Status-Schlüssel; ein MCP-Fehler setzt trellis: unreachable. /trellis:off invalidiert laufende Updates und löscht den Status-Schlüssel. Reine Formatter und injizierbare MCP-/UI-Abhängigkeiten halten Darstellung und Lebenszyklus testbar.'
+          approved_content_hash: 67cea30565bc65df780dfc1ec7c4bc7999ea6b1e6ece167c8762ed2a60bac7bf
+          approved_parent_hash: 17113f01288ae0ff129811cd734d99fda1974cc6231aff62763a15b7e1d1fff1
+          children:
+            - id: DD-3
+              kind: detail_design
+              title: Kompakte UI-only Kanban-Zusammenfassung
+              body: src/status.ts erzeugt aus dem um Worktree-Pfade ergänzten Overview eine deterministisch begrenzte Kanban-Zusammenfassung mit Zeilen für Kanban-Zähler todo/refined/in_progress/done und unbekannte Status, in_progress-Storys, stale Nodes und blocked_gates für Storys mit gates_open=false. Leere Listen erscheinen als none und Zähler als 0; lange Listen werden mit …(+N) begrenzt. Der /trellis:status-Handler verwendet findTrellisProject und getOverview, zeigt den Text mit ctx.ui.notify(..., info) oder eine konkrete Meldung mit error und verändert weder Trellis-Modus noch LLM-Kontext. Er ruft weder pi.sendMessage noch pi.sendUserMessage auf und startet keinen Agent-Turn.
+              approved_content_hash: bd6345f551a1ca135e920f6641ad259bb2c198c3bfe2793f9df7270c5bb5cf63
+              approved_parent_hash: 67cea30565bc65df780dfc1ec7c4bc7999ea6b1e6ece167c8762ed2a60bac7bf
+              children:
+                - id: UT-3
+                  kind: unit_test
+                  title: Statusformat und UI-only Command
+                  body: 'Unit-Tests prüfen normale, leere und übergroße Overviews: korrekte Kanban-Zähler, Worktree-Pfade, stale Nodes, blocked_gates, Null/none und deterministische Kürzung der Kanban-Zusammenfassung. Command-Tests prüfen info/error-Aufrufe von ctx.ui.notify, Projekt- und MCP-Fehler sowie null Aufrufe von sendMessage, sendUserMessage oder Agent-Hooks. Jeder Testname enthält die ID dieses unit_test.'
+                  approved_content_hash: d86a30a8ceb1f6f090fd825894dfe3c4208456683965a41c5c02c8134d54026e
+                  approved_parent_hash: bd6345f551a1ca135e920f6641ad259bb2c198c3bfe2793f9df7270c5bb5cf63
+                  evidence:
+                    tests:
+                        - test/status-command.test.ts::UT-3 Statusformat und UI-only Command > UT-3 formatiert Zähler, Worktree, stale Nodes und blockierte Gates
+                        - test/status-command.test.ts::UT-3 Statusformat und UI-only Command > UT-3 stellt leere Bereiche mit Null und none dar
+                        - test/status-command.test.ts::UT-3 Statusformat und UI-only Command > UT-3 begrenzt große Zusammenfassungen deterministisch
+                        - test/status-command.test.ts::UT-3 Statusformat und UI-only Command > UT-3 gibt Status und Fehler nur über ctx.ui.notify aus
+                    recorded_at: "2026-08-30T14:49:32Z"
+            - id: DD-4
+              kind: detail_design
+              title: Turn-aktuelle Statusline ohne stale Fallback
+              body: 'src/status.ts formatiert den Statusline-Eintrag als trellis: <Story-ID> | gates open beziehungsweise gates blocked; ohne in_progress-Story zeigt er trellis: idle. /trellis:on setzt ihn aus dem bereits validierten Overview. Ein turn_end-Handler erfasst den aktuellen Aktivierungszustand, ruft getOverview frisch auf und setzt bei Erfolg den neuen Wert. Bei jedem MCP-Fehler setzt er trellis: unreachable und verwendet keine stale Daten. Vor dem Schreiben vergleicht er die erfasste Aktivierung, damit /trellis:off oder erneutes /trellis:on verspätete Updates entwertet. /trellis:off löscht mit ctx.ui.setStatus("trellis", undefined); im inaktiven Trellis-Modus führt turn_end weder MCP-Abfrage noch Status-Update aus.'
+              approved_content_hash: 2304882c9f342feb92a15ba195f9247ba149c8c0ee4bc550a808ca351896ff57
+              approved_parent_hash: 67cea30565bc65df780dfc1ec7c4bc7999ea6b1e6ece167c8762ed2a60bac7bf
+              children:
+                - id: UT-4
+                  kind: unit_test
+                  title: Statusline-Aktualisierung, Fehler und Off-Race
+                  body: 'Unit-Tests prüfen den initialen Statusline-Eintrag bei /trellis:on, Aktualisierung nach jedem turn_end, open/blocked/idle-Darstellung, trellis: unreachable ohne stale Fallback bei MCP-Fehler, keine Arbeit im inaktiven Trellis-Modus und das Löschen sowie Entwerten laufender Updates durch /trellis:off. Jeder Testname enthält die ID dieses unit_test.'
+                  approved_content_hash: 9c9d6cf19140e8b098c73bec98d4d5794c0ec905d89a42d6c3fac1dec3bcf4e4
+                  approved_parent_hash: 2304882c9f342feb92a15ba195f9247ba149c8c0ee4bc550a808ca351896ff57
+                  evidence:
+                    tests:
+                        - test/statusline.test.ts::UT-4 Statusline-Aktualisierung und Off-Race > UT-4 formatiert open, blocked und idle kompakt
+                        - test/statusline.test.ts::UT-4 Statusline-Aktualisierung und Off-Race > UT-4 setzt initial, aktualisiert nach Turn und zeigt unreachable ohne stale Fallback
+                        - test/statusline.test.ts::UT-4 Statusline-Aktualisierung und Off-Race > UT-4 löscht bei Off und arbeitet danach nicht mehr
+                        - test/statusline.test.ts::UT-4 Statusline-Aktualisierung und Off-Race > UT-4 entwertet ein verspätetes Turn-Update nach Off
+                        - test/statusline.test.ts::UT-4 Statusline-Aktualisierung und Off-Race > UT-4 verhindert dass ein laufendes On die Deaktivierung rückgängig macht
+                        - test/statusline.test.ts::UT-4 Statusline-Aktualisierung und Off-Race > UT-4 lässt bei parallelen Turn-Updates nur das neueste Ergebnis schreiben
+                    recorded_at: "2026-08-30T14:49:32Z"
+            - id: IT-2
+              kind: integration_test
+              title: Commands, Turn-Hook und Pi-UI
+              body: 'Ein Integrations-Test lädt die TypeScript-pi-Extension in den ExtensionAPI-Testadapter und koppelt sie an einen Fake-MCP-stdio-Prozess. Er führt /trellis:status, /trellis:on, turn_end und /trellis:off aus, prüft Kanban-Zusammenfassung, Statusline-Eintrag und trellis: unreachable sowie dass keine LLM-Nachricht oder Agent-Ausführung ausgelöst wird. Der Testname enthält die ID dieses integration_test.'
+              approved_content_hash: cdf4078a76d6402e5459593283754eda93ce154566b368ba2be1c11fd74d7269
+              approved_parent_hash: 67cea30565bc65df780dfc1ec7c4bc7999ea6b1e6ece167c8762ed2a60bac7bf
+              evidence:
+                tests:
+                    - test/integration-status.test.ts::IT-2 Commands, MCP-stdio, Turn-Hook und Pi-UI > IT-2 integriert UI-only Status, Statusline, unreachable und Off
+                recorded_at: "2026-08-30T14:49:32Z"
+        - id: AT-2
+          kind: acceptance_test
+          title: UI-Status und Statusline-Lebenszyklus
+          body: 'Eine Black-box-Suite lädt die TypeScript-pi-Extension mit Fake-Trellis-MCP und UI-Spies. Sie prüft die vollständige Kanban-Zusammenfassung von /trellis:status einschließlich Null/none-Zuständen, Worktree-Pfad, stale Nodes und blockierten Gates sowie Fehlerausgabe, ohne Agent- oder LLM-Nachricht. Im Trellis-Modus prüft sie den Statusline-Eintrag bei Aktivierung und nach Turn-Ende, trellis: unreachable bei MCP-Ausfall und das dauerhafte Entfernen durch /trellis:off. Der Testname enthält die ID dieses acceptance_test.'
+          covers:
+            - US-2.AC-1
+            - US-2.AC-2
+            - US-2.AC-3
+            - US-2.AC-4
+          approved_content_hash: 1813dacaf16a159df6cab17f673089e327551ffe8f94af4b9c954080e086240a
+          approved_parent_hash: 17113f01288ae0ff129811cd734d99fda1974cc6231aff62763a15b7e1d1fff1
+          evidence:
+            tests:
+                - test/acceptance-status.test.ts::AT-2 UI-Status und Statusline Acceptance > AT-2 erfüllt UI-only Summary, Leerzustand, Statusline-Fehler und Off
+            recorded_at: "2026-08-30T14:49:32Z"
+    - id: US-3
+      kind: story
+      title: Spec-aware Dateihinweise
+      body: Die TypeScript-pi-Extension ergänzt den aktiven Trellis-Modus um spec-aware Dateihinweise. Nach Änderungen durch edit oder write prüft sie mit specs_for_path betroffene Done-Storys und reiht je Story und Sitzung höchstens einen Dateihinweis für den nächsten User-Turn ein; die aktuell in_progress befindliche Story bleibt ausgenommen.
+      status: done
+      acceptance_criteria:
+        - id: US-3.AC-1
+          given: Der Trellis-Modus ist aktiv und specs_for_path ordnet eine durch einen erfolgreichen edit- oder write-Tool-Call geänderte Datei einer Story mit Status done zu.
+          when: Der Tool-Call abgeschlossen ist.
+          then: Der kurze Dateihinweis „Datei X betrifft Story Y – sind deren Specs/Tests noch aktuell?“ wird mit deliverAs nextTurn in den LLM-Kontext eingereiht, ohne einen Turn auszulösen.
+        - id: US-3.AC-2
+          given: Für eine Done-Story wurde in der laufenden Sitzung bereits ein Dateihinweis eingereiht.
+          when: Weitere Dateien derselben Story durch edit oder write geändert werden.
+          then: Es wird kein weiterer Dateihinweis für diese Story erzeugt; eine andere betroffene Done-Story erhält weiterhin ihren eigenen einmaligen Dateihinweis.
+        - id: US-3.AC-3
+          given: specs_for_path ordnet die geänderte Datei der aktuell in_progress befindlichen Story zu.
+          when: Der Trellis-Modus aktiv ist und die Datei geändert wird.
+          then: Für diese Story wird kein Dateihinweis erzeugt, auch wenn weitere Änderungen an ihren Dateien erfolgen.
+        - id: US-3.AC-4
+          given: Der Trellis-Modus ist inaktiv, der Tool-Call schlägt fehl oder ändert keine Datei, oder specs_for_path liefert keine zugehörige Done-Story.
+          when: Ein edit- oder write-Tool-Call verarbeitet wird.
+          then: Es wird kein Dateihinweis in den LLM-Kontext eingereiht.
+      approved_content_hash: 99ce28bbac8f3bb776664a38d4318f21529e41601a5de2aae9ac0a725eaa20c4
+      children:
+        - id: AS-3
+          kind: arch
+          title: Tool-Ergebnis-basierte Dateihinweise der Trellis-Extension
+          body: Die bestehende TypeScript-pi-Extension registriert tool_call und tool_result für edit und write. tool_call erfasst pro Tool-Call den normalisierten Dateipfad und den Inhalt vor der Mutation; tool_result verarbeitet nur erfolgreiche tatsächliche Inhaltsänderungen im aktiven Trellis-Modus. Der bestehende MCP-Port erhält specsForPath(projectId, path, signal), startet wie getOverview einen eigenen stdio-Client und ruft specs_for_path auf. Für jede zurückgegebene Story mit Status done, außer der aktuell in_progress befindlichen Story, sendet die Extension den Dateihinweis über pi.sendMessage mit deliverAs nextTurn und ohne triggerTurn. Eine sitzungsinterne Menge bereits berücksichtigter Story-IDs verhindert Wiederholungen. Deaktivierung, Fehlschläge, unveränderte Inhalte, leere Treffer und MCP-Fehler erzeugen keinen Dateihinweis. Injizierbare Datei- und MCP-Abhängigkeiten sowie reine Auswahl- und Formatierungsfunktionen halten den Lebenszyklus testbar.
+          approved_content_hash: b1cfcd967d455682f15b4092534b4fd2f84c0fa19918adee67ca72e3729b6e07
+          approved_parent_hash: 99ce28bbac8f3bb776664a38d4318f21529e41601a5de2aae9ac0a725eaa20c4
+          children:
+            - id: DD-5
+              kind: detail_design
+              title: Dateiänderung erkennen, Storys auswählen und sitzungsintern deduplizieren
+              body: Ein Pending-Record je toolCallId speichert für edit/write den aus event.input.path relativ zu ctx.cwd normalisierten Pfad und einen optionalen Vorher-Inhalt. Beim zugehörigen tool_result werden fehlerhafte Ergebnisse verworfen und der aktuelle Inhalt verglichen; nur eine tatsächliche Änderung setzt die Verarbeitung fort. Aus specsForPath werden ausschließlich Storys mit Status done gewählt; Storys mit Status in_progress werden ausgeschlossen. Eine Set<string>-Menge im Extension-Lebenszyklus reserviert jede Story-ID vor dem Senden, sodass parallele oder spätere Treffer höchstens einen Dateihinweis pro Story und Sitzung erzeugen. Der Formatter erzeugt „Datei X betrifft Story Y – sind deren Specs/Tests noch aktuell?“. pi.sendMessage erhält deliverAs nextTurn und kein triggerTurn. Fehler beim Lesen oder bei specsForPath werden ohne Dateihinweis abgefangen.
+              approved_content_hash: 6ad1bb0fafa600d7f58f7622354b00b97c74b427644aff3db90a243ad9584d11
+              approved_parent_hash: b1cfcd967d455682f15b4092534b4fd2f84c0fa19918adee67ca72e3729b6e07
+              children:
+                - id: UT-5
+                  kind: unit_test
+                  title: UT-5 Änderungserkennung, Auswahl, Format und Deduplizierung
+                  body: Unit-Tests prüfen normalisierte relative und absolute Pfade, neue/geänderte gegenüber unveränderten Dateien, fehlerhafte Tool-Ergebnisse, done-/in_progress-/leere Treffer, mehrere Storys, wiederholte und parallele Treffer sowie den exakten Dateihinweis. Sie prüfen insbesondere deliverAs nextTurn und das Fehlen von triggerTurn. Jeder Testname enthält UT-5.
+                  approved_content_hash: d7850328e738815c62c2eaa09fb811f7bd154df036d70388a559d690fd129a25
+                  approved_parent_hash: 6ad1bb0fafa600d7f58f7622354b00b97c74b427644aff3db90a243ad9584d11
+                  evidence:
+                    tests:
+                        - test/file-hints.test.ts::UT-5 Änderungserkennung, Auswahl, Format und Deduplizierung > UT-5 normalisiert Projektpfade und formatiert den exakten Dateihinweis
+                        - test/file-hints.test.ts::UT-5 Änderungserkennung, Auswahl, Format und Deduplizierung > UT-5 wählt nur eindeutige noch nicht berücksichtigte Done-Storys
+                        - test/file-hints.test.ts::UT-5 Änderungserkennung, Auswahl, Format und Deduplizierung > UT-5 erkennt Änderungen, dedupliziert je Story und verwendet nextTurn ohne Turn-Trigger
+                        - test/file-hints.test.ts::UT-5 Änderungserkennung, Auswahl, Format und Deduplizierung > UT-5 unterdrückt unveränderte, fehlerhafte und im inaktiven Trellis-Modus ausgeführte Mutationen
+                    recorded_at: "2026-08-30T15:00:36Z"
+            - id: DD-6
+              kind: detail_design
+              title: MCP-Aufruf und Parser für specs_for_path
+              body: TrellisMcpClient kapselt den gemeinsamen initialize-/tools/call-Lebenszyklus und ergänzt specsForPath(projectId, path, signal). Der Tool-Aufruf verwendet name specs_for_path und arguments { path }. Ein strikter Parser akzeptiert structuredContent oder JSON-Textinhalt und liefert Story-Referenzen mit id, title und status; ungültige Antwortformen werden als TrellisMcpError behandelt. Abort, Timeout, Prozessende und Aufräumen entsprechen getOverview.
+              approved_content_hash: 6a264c33dde27f1443c63c78e8872d1fc143dd7634dc310fb75d86ae8d7f2c73
+              approved_parent_hash: b1cfcd967d455682f15b4092534b4fd2f84c0fa19918adee67ca72e3729b6e07
+              children:
+                - id: UT-6
+                  kind: unit_test
+                  title: UT-6 specs_for_path-Protokoll und Antwortparser
+                  body: Unit-Tests treiben einen Fake-stdio-Prozess und prüfen initialize, tools/call mit specs_for_path und Pfadargument, structuredContent und JSON-Text, leere Treffer sowie ungültige Antworten, Timeout und Abort. Jeder Testname enthält UT-6.
+                  approved_content_hash: c6249f61daf95f59d5ad2046e39149572f6b185f4d9e3b028866987f57d6626a
+                  approved_parent_hash: 6a264c33dde27f1443c63c78e8872d1fc143dd7634dc310fb75d86ae8d7f2c73
+                  evidence:
+                    tests:
+                        - test/mcp-specs-for-path.test.ts::UT-6 specs_for_path-Protokoll und Antwortparser > UT-6 sendet specs_for_path mit Pfad und parst structuredContent
+                        - test/mcp-specs-for-path.test.ts::UT-6 specs_for_path-Protokoll und Antwortparser > UT-6 parst JSON-Text und leere Treffer
+                        - test/mcp-specs-for-path.test.ts::UT-6 specs_for_path-Protokoll und Antwortparser > UT-6 lehnt ungültige Antworten konkret ab
+                        - test/mcp-specs-for-path.test.ts::UT-6 specs_for_path-Protokoll und Antwortparser > UT-6 unterstützt Abort und Timeout für specs_for_path
+                    recorded_at: "2026-08-30T15:00:36Z"
+            - id: IT-3
+              kind: integration_test
+              title: IT-3 edit/write-Hooks mit specs_for_path über MCP-stdio
+              body: Eine Integration-Suite lädt die TypeScript-pi-Extension mit echten tool_call-/tool_result-Hooks, temporären Dateien und einem Fake-Trellis-MCP-Prozess. Sie ändert Dateien per edit/write-Ereignisfolge, prüft den tools/call-Aufruf von specs_for_path und den eingereihten Dateihinweis mit deliverAs nextTurn ohne Turn-Trigger sowie die Unterdrückung nach /trellis:off. Der Testname enthält IT-3.
+              approved_content_hash: 9f87c2cb0b2a833a629ec0578826928c27cf7522f8c6dd4d6c878a80c7d3376e
+              approved_parent_hash: b1cfcd967d455682f15b4092534b4fd2f84c0fa19918adee67ca72e3729b6e07
+              evidence:
+                tests:
+                    - test/integration-file-hints.test.ts::IT-3 edit/write-Hooks mit specs_for_path über MCP-stdio > IT-3 verbindet Dateiänderung, MCP-Aufruf, nextTurn-Dateihinweis und Deaktivierung
+                recorded_at: "2026-08-30T15:00:36Z"
+        - id: AT-3
+          kind: acceptance_test
+          title: AT-3 Spec-aware Dateihinweise im Trellis-Modus
+          body: Eine Black-box-Suite lädt die TypeScript-pi-Extension mit Datei-, MCP- und Nachrichten-Spies. Sie aktiviert den Trellis-Modus und prüft für erfolgreiche edit/write-Änderungen Dateihinweise für Done-Storys, genau einmal pro Story und Sitzung, getrennte Hinweise für weitere Done-Storys, die Ausnahme der aktuell in_progress befindlichen Story sowie die vollständige Unterdrückung bei inaktivem Trellis-Modus, Fehlern, unveränderten Dateien oder fehlenden Done-Treffern. Sie beweist deliverAs nextTurn ohne Turn-Trigger. Der Testname enthält AT-3.
+          covers:
+            - US-3.AC-1
+            - US-3.AC-2
+            - US-3.AC-3
+            - US-3.AC-4
+          approved_content_hash: 47671f57c22236df9ec26517fe43ea21d4b51834c8118ded236bebae2ef707d7
+          approved_parent_hash: 99ce28bbac8f3bb776664a38d4318f21529e41601a5de2aae9ac0a725eaa20c4
+          evidence:
+            tests:
+                - test/acceptance-file-hints.test.ts::AT-3 Spec-aware Dateihinweise im Trellis-Modus > AT-3 erfüllt Done-Hinweise, Sitzungs-Deduplizierung, in_progress-Ausnahme und Unterdrückung
+            recorded_at: "2026-08-30T15:00:36Z"
+    - id: US-4
+      kind: story
+      title: Repository als pi-Package paketieren
+      body: Das Repository wird als buildfreies pi-Package paketiert. Ein TypeScript-Entry unter extensions re-exportiert die bestehende Extension, package.json deklariert pi-Core-Pakete ausschließlich als peerDependencies und ein kurzes README dokumentiert Installation, Commands, Trellis-Kontextblock und Dateihinweis.
+      status: done
+      acceptance_criteria:
+        - id: US-4.AC-1
+          given: Das Repository ist lokal ausgecheckt.
+          when: Es mit pi -e <repo-pfad> oder als lokaler packages-Eintrag geladen wird.
+          then: pi entdeckt die Extension über extensions, deren TypeScript-Entry src/index.ts re-exportiert; es sind weder Build-Schritt noch dist-Artefakte erforderlich.
+        - id: US-4.AC-2
+          given: Das Repository wird als pi-Package installiert oder gepackt.
+          when: pi beziehungsweise npm dessen package.json auswertet.
+          then: Das Manifest deklariert die Extension und das Keyword pi-package; importierte pi-Core-Pakete wie @earendil-works/pi-coding-agent stehen mit Range * in peerDependencies und weder in dependencies noch in bundledDependencies.
+        - id: US-4.AC-3
+          given: Ein User öffnet das Repository ohne Vorwissen.
+          when: Er das README liest.
+          then: Er findet eine kurze Anleitung für lokale Installation beziehungsweise einen packages-Eintrag, die Commands /trellis:on, /trellis:off und /trellis:status sowie verständliche Erklärungen zu Trellis-Kontextblock und Dateihinweis.
+      approved_content_hash: 29e08c1f493f77bf7eb8d576f20ccee1789dfd9300ec4dec9f07fb427017ff45
+      children:
+        - id: AS-4
+          kind: arch
+          title: Buildfreies pi-Package nach Konventionslayout
+          body: Das Repository ergänzt extensions/index.ts als TypeScript-Entry, der die Default-Factory und öffentlichen Exporte aus src/index.ts re-exportiert. package.json kennzeichnet das pi-Package mit dem Keyword pi-package und verweist im pi.extensions-Manifest auf extensions. Importierte pi-Core-Pakete werden mit Range * in peerDependencies deklariert und fehlen in dependencies sowie bundledDependencies; TypeScript bleibt direkt durch pis jiti-Loader ausführbar, ohne Build-Skript oder dist. Ein README dokumentiert lokale Installation per pi -e und packages-Eintrag sowie /trellis:on, /trellis:off, /trellis:status, Trellis-Kontextblock und Dateihinweis. Statische Manifest-/Dokumenttests und ein Laufzeitimport des Package-Entry sichern die Paketierung.
+          approved_content_hash: 9377d1cd161d7dcd791453287b1e377261e6dbec94d6e2064f5eee65302f2053
+          approved_parent_hash: 29e08c1f493f77bf7eb8d576f20ccee1789dfd9300ec4dec9f07fb427017ff45
+          children:
+            - id: DD-7
+              kind: detail_design
+              title: Konventionsentry und Package-Metadaten
+              body: extensions/index.ts enthält ausschließlich TypeScript-Re-Exports der Default-Factory und öffentlichen API aus ../src/index.js. package.json enthält keywords mit pi-package und pi.extensions mit ./extensions. Jedes aus Produktionscode importierte pi-Core-Paket steht mit * in peerDependencies; diese Namen fehlen in dependencies und bundledDependencies. Es gibt weder Build-Skript noch dist-Pfad im Manifest. Ein Pakettest liest das Manifest, prüft Entry und Abhängigkeitsgrenzen und validiert die npm-Packliste.
+              approved_content_hash: 7ec14f96e0863afbd3da3aab593827b4b93b2071f910b0640c05513609dea9db
+              approved_parent_hash: 9377d1cd161d7dcd791453287b1e377261e6dbec94d6e2064f5eee65302f2053
+              children:
+                - id: UT-7
+                  kind: unit_test
+                  title: UT-7 Package-Layout und Manifestregeln
+                  body: Unit-Tests prüfen extensions/index.ts, pi.extensions, pi-package, peerDependencies mit Range *, das Fehlen von pi-Core-Paketen in dependencies und bundledDependencies sowie das Fehlen eines notwendigen Build-/dist-Artefakts. Jeder Testname enthält UT-7.
+                  approved_content_hash: ff117d4988d8268ee967e8fd5cf86ebadb68e07800d631dd053efdf4a6474647
+                  approved_parent_hash: 7ec14f96e0863afbd3da3aab593827b4b93b2071f910b0640c05513609dea9db
+                  evidence:
+                    tests:
+                        - test/package-layout.test.ts::UT-7 Package-Layout und Manifestregeln > UT-7 deklariert das Konventionsentry und pi-package
+                        - test/package-layout.test.ts::UT-7 Package-Layout und Manifestregeln > UT-7 hält pi-Core-Pakete als ungebündelte Peers
+                    recorded_at: "2026-08-30T15:07:59Z"
+            - id: DD-8
+              kind: detail_design
+              title: Kurzes README für Installation und Nutzung
+              body: README.md erklärt die lokale Ausführung mit pi -e <repo-pfad> und einen JSON-packages-Eintrag. Es beschreibt knapp /trellis:on, /trellis:off und /trellis:status und verwendet die Glossarbegriffe Trellis-Modus, Trellis-Kontextblock und Dateihinweis mit deren Verhalten. Ein Dokumenttest prüft diese Pflichtinhalte, ohne Formulierungen unnötig festzuschreiben.
+              approved_content_hash: ffc3fcfa0e3f9b613c85e232118b878949bcdc22d82d57d77c923db367084f8b
+              approved_parent_hash: 9377d1cd161d7dcd791453287b1e377261e6dbec94d6e2064f5eee65302f2053
+              children:
+                - id: UT-8
+                  kind: unit_test
+                  title: UT-8 README-Pflichtinhalte
+                  body: Unit-Tests lesen README.md und prüfen Installationskommando, packages-Beispiel, alle drei Commands sowie Trellis-Kontextblock und Dateihinweis. Jeder Testname enthält UT-8.
+                  approved_content_hash: a380c5c1b4e2003c1e9b377f61cba2523c1a5dd0574405fefa6f3c32c1ada13e
+                  approved_parent_hash: ffc3fcfa0e3f9b613c85e232118b878949bcdc22d82d57d77c923db367084f8b
+                  evidence:
+                    tests:
+                        - test/readme.test.ts::UT-8 README-Pflichtinhalte > UT-8 dokumentiert Installation, Commands, Trellis-Kontextblock und Dateihinweis
+                    recorded_at: "2026-08-30T15:07:59Z"
+            - id: IT-4
+              kind: integration_test
+              title: IT-4 TypeScript-Package-Entry lädt die Extension
+              body: Eine Integration-Suite importiert extensions/index.ts ohne vorherigen Build, vergleicht dessen Default-Export mit der bestehenden Extension-Factory und registriert ihn an einem Pi-Harness. Sie prüft, dass die drei Commands verfügbar sind. Der Testname enthält IT-4.
+              approved_content_hash: 57536477d4771941597644e9a901f645472b8812ed7ee730989b93aac3574751
+              approved_parent_hash: 9377d1cd161d7dcd791453287b1e377261e6dbec94d6e2064f5eee65302f2053
+              evidence:
+                tests:
+                    - test/integration-package.test.ts::IT-4 TypeScript-Package-Entry lädt die Extension > IT-4 re-exportiert die Extension ohne Build und registriert alle Commands
+                recorded_at: "2026-08-30T15:07:59Z"
+        - id: AT-4
+          kind: acceptance_test
+          title: AT-4 Installierbares und dokumentiertes pi-Package
+          body: Eine Black-box-Suite betrachtet das Repository als Package-Root. Sie prüft, dass der TypeScript-Entry ohne Build importierbar ist, npm pack die Extension- und Quelldateien sowie README enthält und keine dist-Ausgabe benötigt, dass das Manifest pi-Core-Pakete nur als peers ausweist und dass README Installation, Commands, Trellis-Kontextblock und Dateihinweis vollständig beschreibt. Der Testname enthält AT-4.
+          covers:
+            - US-4.AC-1
+            - US-4.AC-2
+            - US-4.AC-3
+          approved_content_hash: fef8fef1c1afb533f39fcfed1e1a9beec45853792d4cfb0c4b6b3bebcef54ef6
+          approved_parent_hash: 29e08c1f493f77bf7eb8d576f20ccee1789dfd9300ec4dec9f07fb427017ff45
+          evidence:
+            tests:
+                - test/acceptance-package.test.ts::AT-4 Installierbares und dokumentiertes pi-Package > AT-4 liefert ein buildfreies Package mit Peer-Metadaten und vollständigem README
+            recorded_at: "2026-08-30T15:07:59Z"
