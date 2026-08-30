@@ -11,11 +11,14 @@
 - **US-5** — Geführtes Projekt-Interview über /trellis:init
 - **US-6** — Subagent-Rezepte und Auto-Load
 - **US-7** — Qualitätswerkzeuge für Änderungsreview und Reliktsuche
+- **US-8** — Context-Hygiene im Trellis-Modus
 
 ## Glossary
 
+- **Aufbewahrungsfenster** — Anzahl abgeschlossener Turns, die externe read-Results vollständig bleiben.
 - **Auto-Load** — Projektlokales automatisches Laden der Extension durch pi.
 - **Board-Adresse** — Konfigurierbare Live-Board-Basisadresse; Standard http://127.0.0.1:7420.
+- **Context-Hygiene** — Verlustfreie Bereinigung überholter LLM-Kontextinhalte.
 - **Dateihinweis** — Einmal pro Done-Story und Sitzung eingereihter LLM-Kontexthinweis nach einer zugehörigen Dateiänderung.
 - **Drei-Prüfer-Check** — Parallele Prüfung durch drei Qualitätsagenten.
 - **Interview-Prompt** — Strukturierte LLM-Anleitung für das geführte Projekt-Interview.

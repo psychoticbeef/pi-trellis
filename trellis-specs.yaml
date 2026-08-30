@@ -8,10 +8,14 @@ project:
     test_cmd: npx vitest run --reporter=junit --outputFile=reports/tests.xml --coverage.enabled --coverage.reporter=lcov --coverage.reportsDirectory=reports/coverage
     junit_glob: reports/*.xml
 glossary:
+    - term: Aufbewahrungsfenster
+      definition: Anzahl abgeschlossener Turns, die externe read-Results vollständig bleiben.
     - term: Auto-Load
       definition: Projektlokales automatisches Laden der Extension durch pi.
     - term: Board-Adresse
       definition: Konfigurierbare Live-Board-Basisadresse; Standard http://127.0.0.1:7420.
+    - term: Context-Hygiene
+      definition: Verlustfreie Bereinigung überholter LLM-Kontextinhalte.
     - term: Dateihinweis
       definition: Einmal pro Done-Story und Sitzung eingereihter LLM-Kontexthinweis nach einer zugehörigen Dateiänderung.
     - term: Drei-Prüfer-Check
@@ -35,12 +39,12 @@ glossary:
     - term: Änderungsreview
       definition: Read-only Architekturprüfung großer Änderungen.
 counters:
-    AS: 7
-    AT: 7
-    DD: 16
-    IT: 7
-    US: 7
-    UT: 16
+    AS: 8
+    AT: 11
+    DD: 18
+    IT: 8
+    US: 8
+    UT: 18
     ac:US-1: 4
     ac:US-2: 4
     ac:US-3: 4
@@ -48,6 +52,7 @@ counters:
     ac:US-5: 4
     ac:US-6: 4
     ac:US-7: 5
+    ac:US-8: 4
 stories:
     - id: US-1
       kind: story
@@ -779,3 +784,139 @@ stories:
             tests:
                 - test/quality-tools.test.ts::AT-7 End-to-End Qualitätswerkzeuge > AT-7 erfüllt Review, Reliktsuche, parallelen Check und Coverage-Voraussetzung
             recorded_at: "2026-08-30T19:31:22Z"
+    - id: US-8
+      kind: story
+      title: Context-Hygiene im Trellis-Modus
+      body: Die TypeScript-pi-Extension bereinigt vor jedem LLM-Aufruf bei aktivem Trellis-Modus verlustfrei überholte Trellis-Tool-Results und veraltete externe read-Results, ohne die Message-Struktur zu verändern.
+      status: done
+      paths:
+        - README.md
+        - src/context-hygiene.ts
+        - src/index.ts
+        - test/acceptance-context-hygiene.test.ts
+        - test/context-hygiene.test.ts
+        - test/harness.ts
+      acceptance_criteria:
+        - id: US-8.AC-1
+          given: Der Trellis-Modus ist deaktiviert.
+          when: Das context-Event läuft vor einem LLM-Aufruf.
+          then: Die Message-Liste bleibt unverändert.
+        - id: US-8.AC-2
+          given: Der Trellis-Modus ist aktiviert und die Message-Liste enthält mehrere trellis-Tool-Results desselben Tools aus abgeschlossenen Turns.
+          when: Das context-Event läuft vor einem LLM-Aufruf.
+          then: 'Überholte Results werden durch den kurzen Hinweis „[pruned: Wahrheit liegt in trellis]“ ersetzt; das jüngste Result jedes Tools und sämtliche Results des aktuellen Turns bleiben vollständig erhalten.'
+        - id: US-8.AC-3
+          given: Der Trellis-Modus ist aktiviert und ein read-Result für eine Datei außerhalb des Projektverzeichnisses ist älter als das konfigurierte Aufbewahrungsfenster von N abgeschlossenen Turns.
+          when: Das context-Event läuft vor einem LLM-Aufruf.
+          then: 'Der Result-Inhalt wird durch „[pruned: Datei erneut lesen falls nötig]“ ersetzt; der Standard ist N = 3 und read-Results innerhalb des Projekts bleiben vollständig erhalten.'
+        - id: US-8.AC-4
+          given: Der Trellis-Modus ist aktiviert und die Message-Liste enthält zu bereinigende Tool-Results.
+          when: Das context-Event die Context-Hygiene anwendet.
+          then: Reihenfolge, Rollen, Tool-Zuordnung und alle übrigen Message-Felder bleiben unverändert; ausschließlich der Inhalt betroffener Results wird ersetzt und die Conversation bleibt technisch gültig.
+      approved_content_hash: 43cc26d4d6a81e3758718b46b328fa398203ae670b79f3ed0bee24b8f7045372
+      children:
+        - id: AS-8
+          kind: arch
+          title: Verlustfreie Context-Hygiene im context-Event
+          body: Die bestehende TypeScript-pi-Extension registriert context und wendet die Context-Hygiene ausschließlich bei aktivem Trellis-Modus an. Eine reine Transformation korreliert Assistant-Tool-Calls und Tool-Results über toolCallId, bestimmt den aktuellen User-Turn und ersetzt ausschließlich content betroffener ToolResultMessage-Objekte. Pro logischem Trellis-Tool bleibt das jüngste Result erhalten; Results des aktuellen Turns bleiben immer erhalten. read-Pfade werden relativ zu ctx.cwd aufgelöst und gegen das aktive Projektverzeichnis geprüft; externe Results werden erst ersetzt, wenn ihr Alter das konfigurierte Aufbewahrungsfenster überschreitet. TRELLIS_CONTEXT_READ_MAX_AGE_TURNS konfiguriert eine nichtnegative Ganzzahl, Standard 3. Unbetroffene Messages und alle Metadaten, Rollen, Reihenfolge sowie Tool-Zuordnungen bleiben wertgleich; die gespeicherte Sitzung wird nicht verändert, weil context eine Deep Copy liefert.
+          approved_content_hash: c61cf943b4960b138631026f6bf6e4b3a4012af373962a8e8a6eae937cb00f74
+          approved_parent_hash: 43cc26d4d6a81e3758718b46b328fa398203ae670b79f3ed0bee24b8f7045372
+          children:
+            - id: DD-17
+              kind: detail_design
+              title: Strukturerhaltende reine Message-Transformation
+              body: src/context-hygiene.ts exportiert eine reine Funktion für AgentMessage[]. Sie indexiert Assistant-Tool-Calls über ihre IDs und klassifiziert ToolResultMessage-Objekte ohne Cast-bedingte Formänderung. Für jedes erkannte Trellis-Tool wird der letzte Result-Index bestimmt; nur ältere Results vor der letzten User-Message werden Kandidaten. Bei einer Ersetzung werden Message und content neu erzeugt, wobei content genau einen TextContent-Stub enthält und alle übrigen Felder unverändert übernommen werden. Unbetroffene Messages werden unverändert weitergereicht. Die erste Unit-Testgruppe beweist Strukturerhalt und technische Gültigkeit, bevor Auswahlregeln getestet werden.
+              approved_content_hash: 1f1094b535d3ce4dc726950d76eccc56d6d82506b47d84b76c4979b1e724c849
+              approved_parent_hash: c61cf943b4960b138631026f6bf6e4b3a4012af373962a8e8a6eae937cb00f74
+              children:
+                - id: UT-17
+                  kind: unit_test
+                  title: Strukturerhalt und Trellis-Auswahl
+                  body: Unit-Tests prüfen als erste Testgruppe und ersten Testfall Rollen, Reihenfolge, toolCallId, toolName, isError, timestamp, details, usage sowie unbetroffene Content-Blöcke. Weitere Fälle prüfen getrennte Trellis-Tools, das jeweils jüngste Result, mehrere Results im aktuellen Turn, direkte Trellis-Tool-Namen und unterstützte MCP-Gateway-Aufrufe. Jeder Testname enthält die ID dieses unit_test.
+                  approved_content_hash: ff874fb0d6939a9d27673a5e8d70ee0a7414d242a67852acec41d3090aaff041
+                  approved_parent_hash: 1f1094b535d3ce4dc726950d76eccc56d6d82506b47d84b76c4979b1e724c849
+                  evidence:
+                    tests:
+                        - test/context-hygiene.test.ts::UT-17 Strukturerhalt und Trellis-Auswahl > UT-17 erhält zuerst Struktur und Metadaten und ersetzt ausschließlich content
+                        - test/context-hygiene.test.ts::UT-17 Strukturerhalt und Trellis-Auswahl > UT-17 behandelt Trellis-Tools getrennt und erhält das jeweils jüngste Result
+                        - test/context-hygiene.test.ts::UT-17 Strukturerhalt und Trellis-Auswahl > UT-17 erhält verwaiste oder widersprüchlich zugeordnete Trellis-Results
+                        - test/context-hygiene.test.ts::UT-17 Strukturerhalt und Trellis-Auswahl > UT-17 erhält Kontexte ohne User-Message unverändert
+                        - test/context-hygiene.test.ts::UT-17 Strukturerhalt und Trellis-Auswahl > UT-17 erkennt MCP-Gateway-Aufrufe und erhält sämtliche Results des aktuellen Turns
+                    recorded_at: "2026-08-30T20:08:38Z"
+            - id: DD-18
+              kind: detail_design
+              title: Externe read-Pfade, Turn-Alter und Konfiguration
+              body: Die reine Transformation ordnet read-Results über toolCallId dem path-Argument des Assistant-Tool-Calls zu. Absolute Pfade und relativ zu ctx.cwd aufgelöste Pfade gelten genau dann als projektintern, wenn path.relative zum aktiven Projektverzeichnis weder .. verlässt noch absolut ist. Der letzte User-Message-Index markiert den aktuellen Turn. Das Alter eines früheren Results ist die Anzahl danach abgeschlossener User-Turns einschließlich des Ursprungsturns; ersetzt wird nur bei Alter > Aufbewahrungsfenster. parseContextReadMaxAgeTurns liest TRELLIS_CONTEXT_READ_MAX_AGE_TURNS als nichtnegative Ganzzahl und fällt bei fehlendem oder ungültigem Wert auf 3 zurück.
+              approved_content_hash: 3e1c3f69a0b5f41ab10dd08e76d8512b2afd750105baec56e0a223b360986737
+              approved_parent_hash: c61cf943b4960b138631026f6bf6e4b3a4012af373962a8e8a6eae937cb00f74
+              children:
+                - id: UT-18
+                  kind: unit_test
+                  title: read-Pfadgrenzen, Turn-Alter und Aufbewahrungsfenster
+                  body: Unit-Tests prüfen relative und absolute interne/externe Pfade, Präfixkollisionen, Grenze Alter = N gegenüber Alter > N, sämtliche Results des aktuellen Turns, Standard 3, Override 0 und ungültige Konfigurationswerte. Jeder Testname enthält die ID dieses unit_test.
+                  approved_content_hash: f7f2a5d133f255a26ba8b5d52a6d66f5f96140efce9c950bc5cfda2f143b1d08
+                  approved_parent_hash: 3e1c3f69a0b5f41ab10dd08e76d8512b2afd750105baec56e0a223b360986737
+                  evidence:
+                    tests:
+                        - test/context-hygiene.test.ts::UT-18 read-Pfadgrenzen, Turn-Alter und Aufbewahrungsfenster > UT-18 bereinigt erst bei Alter größer N und nur außerhalb des Projekts
+                        - test/context-hygiene.test.ts::UT-18 read-Pfadgrenzen, Turn-Alter und Aufbewahrungsfenster > UT-18 erkennt Präfixkollisionen als extern und erhält read-Results des aktuellen Turns
+                        - test/context-hygiene.test.ts::UT-18 read-Pfadgrenzen, Turn-Alter und Aufbewahrungsfenster > UT-18 parst Standard, Override 0 und ungültige Konfiguration
+                    recorded_at: "2026-08-30T20:08:38Z"
+            - id: IT-8
+              kind: integration_test
+              title: Context-Event im Pi-Harness
+              body: Eine Integration-Suite lädt die TypeScript-pi-Extension im Pi-Harness, aktiviert den Trellis-Modus und führt den registrierten context-Handler mit realistischen User-, Assistant- und ToolResultMessage-Folgen aus. Sie prüft Inaktivitäts-Guard, Trellis-Bereinigung, externes read-Aufbewahrungsfenster und die unveränderte Message-Struktur. Der Testname enthält die ID dieses integration_test.
+              approved_content_hash: afa1cf42bf23029ae64eaaccf8ed11a9c4e22379ea2aa45a6e7f5dbdb2990c0b
+              approved_parent_hash: c61cf943b4960b138631026f6bf6e4b3a4012af373962a8e8a6eae937cb00f74
+              evidence:
+                tests:
+                    - test/acceptance-context-hygiene.test.ts::US-8 Context-Hygiene > IT-8 integriert Aktivierung, context-Handler, Trellis- und read-Bereinigung
+                recorded_at: "2026-08-30T20:08:38Z"
+        - id: AT-10
+          kind: acceptance_test
+          title: Überholte Trellis-Tool-Results bereinigen
+          body: Ein Acceptance-Test aktiviert den Trellis-Modus und prüft mehrere Results desselben Trellis-Tools über mehrere User-Turns. Überholte Results erhalten den Trellis-Stub; das jüngste Result jedes Tools und alle Results seit der letzten User-Message bleiben vollständig. Results verschiedener Trellis-Tools werden unabhängig behandelt. Der Testname enthält die ID dieses acceptance_test.
+          covers:
+            - US-8.AC-2
+          approved_content_hash: 16d92ca51de0cd49a08008ed28e0c997d06148a7743de88bd97370c973f43b08
+          approved_parent_hash: 43cc26d4d6a81e3758718b46b328fa398203ae670b79f3ed0bee24b8f7045372
+          evidence:
+            tests:
+                - test/acceptance-context-hygiene.test.ts::US-8 Context-Hygiene > AT-10 bereinigt überholte Trellis-Results pro Tool und nie im aktuellen Turn
+            recorded_at: "2026-08-30T20:08:38Z"
+        - id: AT-11
+          kind: acceptance_test
+          title: Veraltete externe read-Results bereinigen
+          body: Ein Acceptance-Test aktiviert den Trellis-Modus und prüft read-Results innerhalb und außerhalb des Projektverzeichnisses über mehrere User-Turns. Nur externe Results, deren Alter das Aufbewahrungsfenster überschreitet, erhalten den Datei-Stub; der Standard ist 3 und ein konfigurierter Wert wird beachtet. Der Testname enthält die ID dieses acceptance_test.
+          covers:
+            - US-8.AC-3
+          approved_content_hash: 91dbb1887b8e4740b741c760d9761c82ad5170ed810244eb3946504579046672
+          approved_parent_hash: 43cc26d4d6a81e3758718b46b328fa398203ae670b79f3ed0bee24b8f7045372
+          evidence:
+            tests:
+                - test/acceptance-context-hygiene.test.ts::US-8 Context-Hygiene > AT-11 bereinigt nur externe read-Results nach dem konfigurierten Aufbewahrungsfenster
+            recorded_at: "2026-08-30T20:08:38Z"
+        - id: AT-8
+          kind: acceptance_test
+          title: Strukturerhalt der bereinigten Conversation
+          body: Ein Acceptance-Test aktiviert den Trellis-Modus, übergibt eine gemischte Message-Liste an das context-Event und prüft zuerst, dass Reihenfolge, Rollen, Tool-Zuordnung und sämtliche Felder außer content unverändert bleiben. Nur der content betroffener Tool-Results wird durch den vorgesehenen Textblock ersetzt; die Ergebnisliste bleibt als gültige AgentMessage-Liste verwendbar. Der Testname enthält die ID dieses acceptance_test.
+          covers:
+            - US-8.AC-4
+          approved_content_hash: a8e4b3edb9859b87f993ca3486c4798a192136b77095b54129b4f5f6bc4188eb
+          approved_parent_hash: 43cc26d4d6a81e3758718b46b328fa398203ae670b79f3ed0bee24b8f7045372
+          evidence:
+            tests:
+                - test/acceptance-context-hygiene.test.ts::US-8 Context-Hygiene > AT-8 erhält zuerst die vollständige Conversation-Struktur
+            recorded_at: "2026-08-30T20:08:38Z"
+        - id: AT-9
+          kind: acceptance_test
+          title: Unveränderter Kontext bei deaktiviertem Trellis-Modus
+          body: Ein Acceptance-Test ruft das context-Event ohne aktiven Trellis-Modus mit einer Message-Liste auf, die ansonsten bereinigbare Tool-Results enthält, und prüft vollständige Unverändertheit. Der Testname enthält die ID dieses acceptance_test.
+          covers:
+            - US-8.AC-1
+          approved_content_hash: aa73fa7bb0c9d7ba38ef1d721feb68f5292e437e40d1661f3056e8aae49059c8
+          approved_parent_hash: 43cc26d4d6a81e3758718b46b328fa398203ae670b79f3ed0bee24b8f7045372
+          evidence:
+            tests:
+                - test/acceptance-context-hygiene.test.ts::US-8 Context-Hygiene > AT-9 lässt den Kontext ohne aktiven Trellis-Modus unverändert
+            recorded_at: "2026-08-30T20:08:38Z"
