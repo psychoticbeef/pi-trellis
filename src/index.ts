@@ -4,6 +4,7 @@ import { ensureAgentRecipes } from "./agent-recipes.js";
 import { CHECK_PROMPT } from "./check-prompt.js";
 import { buildBoardUrl, findTrellisProject, type ReadTextFile, type TrellisProject } from "./config.js";
 import { addWorktreePaths, formatTrellisContext, type TrellisOverview } from "./context.js";
+import { parseContextReadMaxAgeTurns, pruneContextMessages } from "./context-hygiene.js";
 import {
   formatFileHint,
   normalizeFilePath,
@@ -42,6 +43,9 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
     new TrellisMcpClient().specsForPath(projectId, path, signal));
   const readFileSnapshot = dependencies.readFileSnapshot ?? defaultReadFileSnapshot;
   const provisionAgentRecipes = dependencies.ensureAgentRecipes ?? ensureAgentRecipes;
+  const contextReadMaxAgeTurns = parseContextReadMaxAgeTurns(
+    environment.TRELLIS_CONTEXT_READ_MAX_AGE_TURNS,
+  );
 
   return function trellisExtension(pi: ExtensionAPI): void {
     let active: ActiveState | undefined;
@@ -204,6 +208,18 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
           { deliverAs: "nextTurn" },
         );
       }
+    });
+
+    pi.on("context", (event, ctx) => {
+      const state = active;
+      if (!state) return undefined;
+      return {
+        messages: pruneContextMessages(event.messages, {
+          cwd: ctx.cwd,
+          projectRoot: state.project.root,
+          readMaxAgeTurns: contextReadMaxAgeTurns,
+        }),
+      };
     });
 
     pi.on("before_agent_start", async (event, ctx) => {

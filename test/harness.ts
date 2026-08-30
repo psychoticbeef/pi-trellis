@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ContextEvent, ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export type CommandHandler = (args: string, context: CommandContext) => Promise<void>;
 export type BeforeAgentStartHandler = (
@@ -9,6 +9,13 @@ export type TurnEndHandler = (
   event: { turnIndex: number },
   context: HookContext,
 ) => Promise<void>;
+export type ContextHandler = (
+  event: ContextEvent,
+  context: HookContext,
+) =>
+  | { messages: ContextEvent["messages"] }
+  | undefined
+  | Promise<{ messages: ContextEvent["messages"] } | undefined>;
 export type ToolCallHandler = (
   event: { toolCallId: string; toolName: string; input: Record<string, unknown> },
   context: HookContext,
@@ -50,6 +57,7 @@ export function createPiHarness() {
   const notifications: Array<{ message: string; level: string }> = [];
   const statuses: Array<{ key: string; value: string | undefined }> = [];
   let beforeAgentStart: BeforeAgentStartHandler | undefined;
+  let contextEvent: ContextHandler | undefined;
   let turnEnd: TurnEndHandler | undefined;
   let toolCall: ToolCallHandler | undefined;
   let toolResult: ToolResultHandler | undefined;
@@ -60,9 +68,10 @@ export function createPiHarness() {
     },
     on(
       event: string,
-      handler: BeforeAgentStartHandler | TurnEndHandler | ToolCallHandler | ToolResultHandler,
+      handler: BeforeAgentStartHandler | ContextHandler | TurnEndHandler | ToolCallHandler | ToolResultHandler,
     ) {
       if (event === "before_agent_start") beforeAgentStart = handler as BeforeAgentStartHandler;
+      if (event === "context") contextEvent = handler as ContextHandler;
       if (event === "turn_end") turnEnd = handler as TurnEndHandler;
       if (event === "tool_call") toolCall = handler as ToolCallHandler;
       if (event === "tool_result") toolResult = handler as ToolResultHandler;
@@ -98,6 +107,10 @@ export function createPiHarness() {
     beforeAgentStart: () => {
       if (!beforeAgentStart) throw new Error("before_agent_start not registered");
       return beforeAgentStart;
+    },
+    contextEvent: () => {
+      if (!contextEvent) throw new Error("context not registered");
+      return contextEvent;
     },
     turnEnd: () => {
       if (!turnEnd) throw new Error("turn_end not registered");

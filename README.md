@@ -33,4 +33,6 @@ Beim Aktivieren werden fehlende read-only **Subagent-Rezepte** create-if-absent 
 
 Im aktiven Trellis-Modus ergänzt ein kurzer **Trellis-Kontextblock** jeden User-Turn um Projektübersicht, Glossar, Story-Status und stale Specs.
 
+Vor jedem LLM-Aufruf ersetzt die **Context-Hygiene** überholte Trellis-Tool-Results und veraltete `read`-Results außerhalb des Projekts durch kurze Hinweise. Das jüngste Result jedes Trellis-Tools, der aktuelle Turn und die Message-Struktur bleiben erhalten. Das **Aufbewahrungsfenster** für externe Reads beträgt standardmäßig drei abgeschlossene Turns und kann mit `TRELLIS_CONTEXT_READ_MAX_AGE_TURNS` auf eine nichtnegative Ganzzahl gesetzt werden.
+
 Nach einer Änderung mit `edit` oder `write` prüft ein **Dateihinweis**, ob die Datei zu einer abgeschlossenen Story gehört. Der Hinweis wird höchstens einmal pro Story und Sitzung für den nächsten User-Turn eingereiht; die aktuell laufende Story ist ausgenommen.
