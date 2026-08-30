@@ -5,7 +5,7 @@ project:
     base_branch: develop
     release_branch: main
     lint_cmd: npx tsc --noEmit
-    test_cmd: npx vitest run --reporter=junit --outputFile=reports/tests.xml
+    test_cmd: npx vitest run --reporter=junit --outputFile=reports/tests.xml --coverage.enabled --coverage.reporter=lcov --coverage.reportsDirectory=reports/coverage
     junit_glob: reports/*.xml
 glossary:
     - term: Auto-Load
@@ -14,12 +14,16 @@ glossary:
       definition: Konfigurierbare Live-Board-Basisadresse; Standard http://127.0.0.1:7420.
     - term: Dateihinweis
       definition: Einmal pro Done-Story und Sitzung eingereihter LLM-Kontexthinweis nach einer zugehörigen Dateiänderung.
+    - term: Drei-Prüfer-Check
+      definition: Parallele Prüfung durch drei Qualitätsagenten.
     - term: Interview-Prompt
       definition: Strukturierte LLM-Anleitung für das geführte Projekt-Interview.
     - term: Kanban-Zusammenfassung
       definition: UI-only Übersicht über Story-Zähler, aktive Arbeit und Risiken.
     - term: pi-Package
       definition: Über package.json oder Konventionsverzeichnisse ladbares pi-Ressourcenpaket.
+    - term: Reliktsuche
+      definition: Read-only Suche nach Code- und Spec-Relikten.
     - term: Statusline-Eintrag
       definition: Dezente aktuelle Anzeige der laufenden Story und ihrer Gates.
     - term: Subagent-Rezept
@@ -28,19 +32,22 @@ glossary:
       definition: Pro User-Turn injizierte Trellis-Projektübersicht unter 1500 Zeichen.
     - term: Trellis-Modus
       definition: Aktivierte Trellis-Kontextinjektion einer pi-Sitzung.
+    - term: Änderungsreview
+      definition: Read-only Architekturprüfung großer Änderungen.
 counters:
-    AS: 6
-    AT: 6
-    DD: 13
-    IT: 6
-    US: 6
-    UT: 13
+    AS: 7
+    AT: 7
+    DD: 16
+    IT: 7
+    US: 7
+    UT: 16
     ac:US-1: 4
     ac:US-2: 4
     ac:US-3: 4
     ac:US-4: 3
     ac:US-5: 4
     ac:US-6: 4
+    ac:US-7: 5
 stories:
     - id: US-1
       kind: story
@@ -517,7 +524,7 @@ stories:
     - id: US-6
       kind: story
       title: Subagent-Rezepte und Auto-Load
-      body: Die Extension stellt drei projektlokale Subagent-Rezepte create-if-absent bereit, ergänzt /trellis:check um eine Agent-Tool-orientierte Prüfung mit Inline-Fallback und wird über committete Projekteinstellungen ohne -e automatisch durch pi geladen.
+      body: Die Extension stellt projektlokale Subagent-Rezepte create-if-absent bereit, ergänzt /trellis:check um eine Agent-Tool-orientierte Qualitätsprüfung mit Inline-Fallback und wird über committete Projekteinstellungen ohne -e automatisch durch pi geladen.
       status: done
       paths:
         - .pi/settings.json
@@ -533,43 +540,43 @@ stories:
         - test/integration-package.test.ts
       acceptance_criteria:
         - id: US-6.AC-1
-          given: Der Trellis-Modus ist deaktiviert und mindestens eines der drei Subagent-Rezepte .pi/agents/spec-sync-check.md, .pi/agents/glossary-warden.md oder .pi/agents/pre-finish-review.md fehlt beziehungsweise existiert bereits.
+          given: Der Trellis-Modus ist deaktiviert und mindestens eines der Subagent-Rezepte .pi/agents/spec-sync-check.md, .pi/agents/glossary-warden.md, .pi/agents/pre-finish-review.md, .pi/agents/change-review.md oder .pi/agents/relic-hunter.md fehlt beziehungsweise existiert bereits.
           when: Der User führt /trellis:on erfolgreich aus.
           then: Die Extension legt jedes fehlende Subagent-Rezept im Format von @tintinweb/pi-subagents an und lässt jede bereits vorhandene Datei bytegenau unverändert.
         - id: US-6.AC-2
-          given: Die drei Subagent-Rezepte sind vorhanden.
+          given: Die fünf Subagent-Rezepte sind vorhanden.
           when: Ihre Aufgaben und Werkzeuggrenzen ausgewertet werden.
-          then: spec-sync-check liest Diff und betroffene Done-Bäume und meldet veraltete Spec-Knoten ausschließlich als Vorschlagsliste; glossary-warden prüft neue Specs und Code auf Terminologie-Drift gegen das Glossar; pre-finish-review prüft den Worktree-Diff anhand der Akzeptanzkriterien der Story als Checkliste.
+          then: spec-sync-check meldet veraltete Done-Specs als Vorschlagsliste; glossary-warden prüft Terminologie-Drift; pre-finish-review prüft Story-Akzeptanzkriterien; change-review prüft Architektur- und Cross-Cutting-Konformität; relic-hunter meldet belegte Code- und Spec-Relikte; alle arbeiten read-only.
         - id: US-6.AC-3
           given: Der Trellis-Modus ist aktiviert.
           when: Der User führt /trellis:check aus.
-          then: Der Command injiziert genau einen Prompt, der das LLM anweist, spec-sync-check und glossary-warden über das Agent-Tool zu spawnen, sofern sie verfügbar sind, und andernfalls beide Prüfungen inline durchzuführen.
+          then: Der Command injiziert genau einen Prompt, der das LLM anweist, spec-sync-check, glossary-warden und relic-hunter über das Agent-Tool parallel zu spawnen, sofern sie verfügbar sind, und andernfalls jede betroffene Prüfung vollständig inline durchzuführen.
         - id: US-6.AC-4
           given: Das Repository ist ausgecheckt und als Projekt vertrauenswürdig freigegeben.
-          when: pi aus dem Repository mit pi --mode print und ohne -e gestartet wird.
-          then: Die committete .pi/settings.json lädt die Extension projektlokal automatisch, sodass ihre Trellis-Commands einschließlich /trellis:check registriert sind.
-      approved_content_hash: 507fba9b71687d348aa3edb964e50a722ad0bedff76c435ad7c32edc20f525e1
+          when: pi aus dem Repository ohne -e gestartet wird.
+          then: Die committete .pi/settings.json lädt die Extension projektlokal automatisch, sodass ihre Trellis-Commands einschließlich /trellis:check und /trellis:review registriert sind.
+      approved_content_hash: 1bc7fe6a9744bb2adab35f5ddbb4ad3b45cf78c40406176a026145aaf27c9eb4
       children:
         - id: AS-6
           kind: arch
           title: Projektlokale Subagent-Rezepte und Extension-Auto-Load
-          body: Die bestehende TypeScript-pi-Extension ergänzt drei statische Markdown-Templates im Frontmatter-Format von @tintinweb/pi-subagents. Nach erfolgreicher /trellis:on-Aktivierung provisioniert ein injizierbarer Dateisystem-Port die Templates atomar mit exklusiver create-if-absent-Semantik unter .pi/agents und überschreibt niemals vorhandene Dateien. Ein statischer Check-Prompt und /trellis:check nutzen pi.sendUserMessage, verlangen bei verfügbarem Agent-Tool parallele Spawns von spec-sync-check und glossary-warden und beschreiben denselben Inline-Fallback. Eine committete .pi/settings.json referenziert aus dem relativ zu .pi aufgelösten extensions-Feld ../extensions/index.ts. Unit-, Integrations-, Acceptance- und echter pi-Print-Prozesstest sichern Inhalte, Verdrahtung und Auto-Load.
-          approved_content_hash: 5d028810e5d37798dc4d04d5c8431b1146cdbdc42a335d4bb653271b3a0475a4
-          approved_parent_hash: 507fba9b71687d348aa3edb964e50a722ad0bedff76c435ad7c32edc20f525e1
+          body: Die bestehende TypeScript-pi-Extension provisioniert die statischen Markdown-Templates aus AGENT_RECIPES im Frontmatter-Format von @tintinweb/pi-subagents. Nach erfolgreicher /trellis:on-Aktivierung schreibt ein injizierbarer Dateisystem-Port die Templates atomar mit exklusiver create-if-absent-Semantik unter .pi/agents und überschreibt niemals vorhandene Dateien. Ein statischer Check-Prompt und /trellis:check nutzen pi.sendUserMessage, verlangen bei verfügbarem Agent-Tool parallele Spawns von spec-sync-check, glossary-warden und relic-hunter und beschreiben denselben vollständigen Inline-Fallback. Eine committete .pi/settings.json referenziert aus dem relativ zu .pi aufgelösten extensions-Feld ../extensions/index.ts. Unit-, Integrations-, Acceptance- und echter pi-Prozesstest sichern Inhalte, Verdrahtung und Auto-Load.
+          approved_content_hash: 7f945fb13c6048646c7f60dcc6f1f3e9393542ec3ee9ef15318251878c2b261c
+          approved_parent_hash: 1bc7fe6a9744bb2adab35f5ddbb4ad3b45cf78c40406176a026145aaf27c9eb4
           children:
             - id: DD-11
               kind: detail_design
               title: Templates und create-if-absent-Provisionierung
-              body: src/agent-recipes.ts exportiert Dateinamen und unveränderliche Markdown-Inhalte für spec-sync-check, glossary-warden und pre-finish-review. Jedes Template besitzt YAML-Frontmatter mit description, ausschließlich read-only Werkzeugen read, grep, find und bash sowie einen präzisen System-Prompt. spec-sync-check liest den Worktree-Diff, ermittelt betroffene Done-Bäume über Trellis und gibt nur eine Vorschlagsliste veralteter Spec-Knoten aus; glossary-warden vergleicht neue Specs und Code mit dem Glossar; pre-finish-review erstellt aus Worktree-Diff und Story-Akzeptanzkriterien eine Checkliste. ensureAgentRecipes(cwd) erzeugt .pi/agents und öffnet jede Zieldatei exklusiv zur Neuerstellung; EEXIST gilt als Erfolg und bewirkt keinen Lese-/Schreibzyklus. /trellis:on ruft die Provisionierung erst nach erfolgreicher Aktivierung auf und meldet Provisionierungsfehler konkret, ohne vorhandene Dateien zu verändern.
-              approved_content_hash: 7a0763cb0536858419ba767b498d3753629944eddc1a4483329766346ca4880a
-              approved_parent_hash: 5d028810e5d37798dc4d04d5c8431b1146cdbdc42a335d4bb653271b3a0475a4
+              body: src/agent-recipes.ts exportiert Dateinamen und unveränderliche Markdown-Inhalte für spec-sync-check, glossary-warden, pre-finish-review, change-review und relic-hunter. Jedes Template besitzt YAML-Frontmatter mit description, ausschließlich read-only Werkzeugen read, grep, find und bash sowie einen präzisen System-Prompt. spec-sync-check liest den Worktree-Diff und meldet veraltete Done-Specs als Vorschlagsliste; glossary-warden vergleicht neue Specs und Code mit dem Glossar; pre-finish-review erstellt eine Akzeptanzkriterien-Checkliste; change-review prüft Architektur- und Cross-Cutting-Konformität; relic-hunter liefert belegte Lösch- oder Aktualisierungsvorschläge für Code- und Spec-Relikte. ensureAgentRecipes(cwd) erzeugt .pi/agents und öffnet jede Zieldatei exklusiv zur Neuerstellung; EEXIST gilt als Erfolg und bewirkt keinen Lese-/Schreibzyklus. /trellis:on ruft die Provisionierung erst nach erfolgreicher Aktivierung auf und meldet Provisionierungsfehler konkret, ohne vorhandene Dateien zu verändern.
+              approved_content_hash: 23534cc2abb4bf7ba3da5d15fe9ba76ccae831f12fbc6bc8868a4b3e1fb5ce2e
+              approved_parent_hash: 7f945fb13c6048646c7f60dcc6f1f3e9393542ec3ee9ef15318251878c2b261c
               children:
                 - id: UT-11
                   kind: unit_test
                   title: UT-11 Rezeptformat, Rollen und create-if-absent
-                  body: Unit-Tests parsen Frontmatter und Body aller drei Templates, prüfen die read-only Werkzeugliste und jede geforderte Rolle. Dateisystemtests prüfen Neuanlage, Teilbestand, bytegenaue Erhaltung vorhandener Dateien, wiederholte Aufrufe und konkurrierendes EEXIST-Verhalten. Jeder Testname enthält UT-11.
-                  approved_content_hash: b93c3ce8f81e9f621161a8d8549650ca571e00a604cef6a64edb4089c1078b75
-                  approved_parent_hash: 7a0763cb0536858419ba767b498d3753629944eddc1a4483329766346ca4880a
+                  body: Unit-Tests prüfen Frontmatter und Body aller Templates, die read-only Werkzeugliste, die grundlegenden Rollen und die Synchronität mit .pi/agents. Dateisystemtests prüfen Neuanlage, Teilbestand, bytegenaue Erhaltung vorhandener Dateien, wiederholte Aufrufe und konkurrierendes EEXIST-Verhalten. Jeder Testname enthält UT-11.
+                  approved_content_hash: 6aabaf7251fb29771a47b8d96fe3a77ffeb14b478a40d10fc5094004b32341d3
+                  approved_parent_hash: 23534cc2abb4bf7ba3da5d15fe9ba76ccae831f12fbc6bc8868a4b3e1fb5ce2e
                   evidence:
                     tests:
                         - test/agent-recipes.test.ts::UT-11 Rezeptformat, Rollen und create-if-absent > UT-11 liefert gültige read-only Templates mit allen drei Rollen
@@ -578,16 +585,16 @@ stories:
             - id: DD-12
               kind: detail_design
               title: Check-Prompt und Slash-Command
-              body: src/check-prompt.ts exportiert CHECK_PROMPT als unveränderlichen String. Er fordert das LLM auf, die Verfügbarkeit des Agent-Tools und beider Typen zu prüfen, spec-sync-check und glossary-warden bei Verfügbarkeit in einem gemeinsamen parallelen Tool-Turn zu spawnen, ihre Ergebnisse als Vorschläge zusammenzuführen und bei fehlendem Agent-Tool oder fehlendem Typ die entsprechenden Diff-/Done-Baum- und Glossarprüfungen inline auszuführen. src/index.ts registriert trellis:check. Der Handler verwendet denselben Aktivierungs-Guard wie trellis:init und sendet bei aktivem Trellis-Modus CHECK_PROMPT genau einmal über pi.sendUserMessage; ohne aktiven Modus verweist er auf /trellis:on.
-              approved_content_hash: 9f3a67e3e82847cf9266f80a2c200be445db7e353eb27108be8da0fdeb02c068
-              approved_parent_hash: 5d028810e5d37798dc4d04d5c8431b1146cdbdc42a335d4bb653271b3a0475a4
+              body: src/check-prompt.ts exportiert CHECK_PROMPT als unveränderlichen String. Er fordert das LLM auf, die Verfügbarkeit des Agent-Tools und der Typen spec-sync-check, glossary-warden und relic-hunter zu prüfen, alle drei bei Verfügbarkeit in einem gemeinsamen parallelen Tool-Turn zu spawnen, ihre Ergebnisse als Vorschläge zusammenzuführen und bei fehlendem Agent-Tool oder fehlendem Typ die vollständige Diff-/Done-Baum-, Glossar- und Reliktprüfung inline auszuführen. src/index.ts registriert trellis:check. Der Handler verwendet denselben Aktivierungs-Guard wie trellis:init und sendet bei aktivem Trellis-Modus CHECK_PROMPT genau einmal über pi.sendUserMessage; ohne aktiven Modus verweist er auf /trellis:on.
+              approved_content_hash: aeef0d62ea4bf440bb2ca231aaf0a1a1a6c985c03589b60fd99adbdc556ab494
+              approved_parent_hash: 7f945fb13c6048646c7f60dcc6f1f3e9393542ec3ee9ef15318251878c2b261c
               children:
                 - id: UT-12
                   kind: unit_test
                   title: UT-12 Check-Prompt und Command-Guard
-                  body: Unit-Tests prüfen die Pflichtinhalte Agent-Tool, spec-sync-check, glossary-warden, paralleler Spawn und vollständiger Inline-Fallback. Harness-Tests prüfen Registrierung, Modus-Guard, Hinweis auf /trellis:on und exakt einen Versand von CHECK_PROMPT nach Aktivierung. Jeder Testname enthält UT-12.
-                  approved_content_hash: 7f7b638889982448aae84475252e234821a69d8a0e97019f713a7b10b13986bc
-                  approved_parent_hash: 9f3a67e3e82847cf9266f80a2c200be445db7e353eb27108be8da0fdeb02c068
+                  body: Unit-Tests prüfen die Pflichtinhalte Agent-Tool, spec-sync-check, glossary-warden, relic-hunter, paralleler Spawn und vollständiger Inline-Fallback. Harness-Tests prüfen Registrierung, Modus-Guard, Hinweis auf /trellis:on und exakt einen Versand von CHECK_PROMPT nach Aktivierung. Jeder Testname enthält UT-12.
+                  approved_content_hash: fecc3a86e866a8b26d9ac62501f10233bd6d24e1516a5264f79e156ae99badf8
+                  approved_parent_hash: aeef0d62ea4bf440bb2ca231aaf0a1a1a6c985c03589b60fd99adbdc556ab494
                   evidence:
                     tests:
                         - test/check-command.test.ts::UT-12 Check-Prompt und Command-Guard > UT-12 beschreibt parallele Agent-Spawns und den vollständigen Inline-Fallback
@@ -598,7 +605,7 @@ stories:
               title: Committete Projekteinstellungen für Auto-Load
               body: '.pi/settings.json enthält gültiges JSON mit extensions: ["../extensions/index.ts"]. Der Pfad wird gemäß pi-Projekteinstellungen relativ zu .pi aufgelöst und lädt dadurch den bestehenden buildfreien Package-Entry. Ein statischer Test prüft Manifestform und Pfadauflösung. Ein Prozess-Test kopiert das Repository in ein temporäres vertrauenswürdig freigegebenes Projekt, startet pi --mode print ohne -e und lässt einen minimalen Prompt die registrierten Commands über die geladene Extension nachweisen; das Kommando erhält eine begrenzte Laufzeit und eine kontrollierte Modell-/Trust-Konfiguration.'
               approved_content_hash: 4fbf88110686db5175380b5a2d9e7f774ce1110b48357638c317954d193ca2c4
-              approved_parent_hash: 5d028810e5d37798dc4d04d5c8431b1146cdbdc42a335d4bb653271b3a0475a4
+              approved_parent_hash: 7f945fb13c6048646c7f60dcc6f1f3e9393542ec3ee9ef15318251878c2b261c
               children:
                 - id: UT-13
                   kind: unit_test
@@ -613,9 +620,9 @@ stories:
             - id: IT-6
               kind: integration_test
               title: IT-6 Aktivierung, Provisionierung und Check im Pi-Harness
-              body: Eine Integration-Suite registriert die Extension am Pi-Harness, aktiviert den Trellis-Modus mit Fake-MCP, prüft die drei angelegten Subagent-Rezepte und unveränderten Vorbestand, führt trellis:check aus und beobachtet genau eine User-Nachricht mit CHECK_PROMPT. Ein separater Prozess-Test startet pi --mode print aus einem temporären Projekt ohne -e und verifiziert projektlokales Auto-Load anhand der verfügbaren Trellis-Commands. Jeder Testname enthält IT-6.
-              approved_content_hash: 6b09d6ab2f1fcef7c86857df4ae0025c0b785f2da9b255a7109de85441af3e8b
-              approved_parent_hash: 5d028810e5d37798dc4d04d5c8431b1146cdbdc42a335d4bb653271b3a0475a4
+              body: Eine Integration-Suite registriert die Extension am Pi-Harness, aktiviert den Trellis-Modus mit Fake-MCP, prüft die angelegten Subagent-Rezepte und unveränderten Vorbestand, führt trellis:check aus und beobachtet genau eine User-Nachricht mit CHECK_PROMPT. Ein separater Prozess-Test startet pi aus einem temporären Projekt ohne -e und verifiziert projektlokales Auto-Load anhand der verfügbaren Trellis-Commands. Jeder Testname enthält IT-6.
+              approved_content_hash: 2c1901f62500708bda804d5324f3b5efb1743e2b7699e778498107970d9ab6c4
+              approved_parent_hash: 7f945fb13c6048646c7f60dcc6f1f3e9393542ec3ee9ef15318251878c2b261c
               evidence:
                 tests:
                     - test/integration-recipes-check.test.ts::IT-6 Aktivierung, Provisionierung und Check im Pi-Harness > IT-6 verbindet Aktivierung, create-if-absent und Check-Prompt
@@ -624,16 +631,151 @@ stories:
         - id: AT-6
           kind: acceptance_test
           title: AT-6 Subagent-Rezepte, Check und Auto-Load
-          body: Eine Black-box-Suite aktiviert die Extension in einem temporären Projekt und prüft create-if-absent für alle drei Subagent-Rezepte einschließlich bytegenauer Erhaltung vorhandener Dateien und ihrer fachlichen Rollen. Sie führt /trellis:check aus und validiert die Agent-Tool-Anweisung mit Inline-Fallback. Ein Prozess-Test startet pi aus einem vertrauenswürdig freigegebenen Projekt mit --mode print ohne -e und weist anhand der registrierten Trellis-Commands nach, dass .pi/settings.json die Extension automatisch lädt. Der Testname enthält AT-6.
+          body: Eine Black-box-Suite aktiviert die Extension in einem temporären Projekt und prüft create-if-absent für die Subagent-Rezepte einschließlich bytegenauer Erhaltung vorhandener Dateien und ihrer fachlichen Rollen. Sie führt /trellis:check aus und validiert die parallele Drei-Prüfer-Anweisung mit vollständigem Inline-Fallback. Ein Prozess-Test startet pi aus einem vertrauenswürdig freigegebenen Projekt ohne -e und weist anhand der registrierten Trellis-Commands nach, dass .pi/settings.json die Extension automatisch lädt. Der Testname enthält AT-6.
           covers:
             - US-6.AC-1
             - US-6.AC-2
             - US-6.AC-3
             - US-6.AC-4
-          approved_content_hash: e4d1f1f5fd05675f72bce4170d972a522aa6ded1f69061b508f2fada20fd6d7a
-          approved_parent_hash: 507fba9b71687d348aa3edb964e50a722ad0bedff76c435ad7c32edc20f525e1
+          approved_content_hash: 45fa8db6e61f1330b68c2f3c8e402923f3de99a818226ff57bbf67195fce48a5
+          approved_parent_hash: 1bc7fe6a9744bb2adab35f5ddbb4ad3b45cf78c40406176a026145aaf27c9eb4
           evidence:
             tests:
                 - test/feature6-acceptance.test.ts::AT-6 Subagent-Rezepte, Check und Auto-Load > AT-6 erfüllt create-if-absent, definierte Rollen, Check-Fallback und Auto-Load
                 - test/settings-autoload.test.ts::AT-6 IT-6 Projektlokales Auto-Load im echten pi-Prozess > AT-6 IT-6 registriert alle Trellis-Commands ohne -e
             recorded_at: "2026-08-30T18:56:28Z"
+    - id: US-7
+      kind: story
+      title: Qualitätswerkzeuge für Änderungsreview und Reliktsuche
+      body: Die Extension ergänzt zwei read-only Subagent-Rezepte, einen Review-Command, den parallelen Drei-Prüfer-Check und eine ausführbare Vitest-Coverage-Konfiguration.
+      status: done
+      paths:
+        - .gitignore
+        - .pi/agents/change-review.md
+        - .pi/agents/relic-hunter.md
+        - README.md
+        - package.json
+        - package-lock.json
+        - src/agent-recipes.ts
+        - src/check-prompt.ts
+        - src/index.ts
+        - src/review-prompt.ts
+        - test/agent-recipes.test.ts
+        - test/check-command.test.ts
+        - test/feature6-acceptance.test.ts
+        - test/integration-package.test.ts
+        - test/integration-recipes-check.test.ts
+        - test/quality-tools.test.ts
+        - test/settings-autoload.test.ts
+      acceptance_criteria:
+        - id: US-7.AC-1
+          given: Ein Worktree-Diff oder ein optional übergebener Git-Range liegt vor.
+          when: Das read-only Subagent-Rezept change-review ausgeführt wird.
+          then: Es lädt die Projekt-Description, die Architektur-Specs aller vom Diff betroffenen Stories sowie sämtliche cross_cutting Specs und berichtet Architekturabweichungen, Schichtverletzungen und Cross-Cutting-Verstöße jeweils mit konkretem Diff- und Spec-Beleg; ohne Argument wird der Worktree-Diff verwendet.
+        - id: US-7.AC-2
+          given: Der Trellis-Modus ist aktiviert.
+          when: /trellis:review mit optionalem Git-Range ausgeführt wird.
+          then: Die Extension startet change-review im Foreground, übergibt den Range unverändert und zeigt dessen Bericht; bei deaktiviertem Trellis-Modus verweist sie auf /trellis:on.
+        - id: US-7.AC-3
+          given: Das read-only Subagent-Rezept relic-hunter wird ausgeführt.
+          when: Es Repository und Trellis-Specs untersucht.
+          then: Es prüft zuerst mechanisch mit npx tsc --noUnusedLocals --noUnusedParameters und – falls verfügbar – npx knip, nutzt andernfalls dokumentierte Heuristiken und meldet auskommentierte Blöcke, TODO-Leichen, veraltete Kommentare, ungenutzten Code, ungenutzte Imports und Dateien, Done-Knoten zu entferntem Verhalten, unbenutzte Glossar-Terme sowie nicht mehr existierende deklarierte Story-Pfade ausschließlich als belegte Lösch- oder Aktualisierungsvorschläge.
+        - id: US-7.AC-4
+          given: Trellis-Modus und Agent-Tool sind verfügbar.
+          when: /trellis:check ausgeführt wird.
+          then: spec-sync-check, glossary-warden und relic-hunter werden in einem gemeinsamen parallelen Tool-Turn gestartet und ihre read-only Vorschläge zusammengeführt; der bestehende vollständige Inline-Fallback bleibt für fehlendes Agent-Tool oder fehlende Agent-Typen erhalten.
+        - id: US-7.AC-5
+          given: Die Projektabhängigkeiten sind installiert.
+          when: Der konfigurierte test_cmd ausgeführt wird.
+          then: Die Vitest-Coverage-Konfiguration läuft mit @vitest/coverage-v8 als devDependency erfolgreich und erzeugt einen LCOV-Report.
+      approved_content_hash: c609f52a275ad0ed92392ec01b586ad369ee3e6558007497603e1887b80e358e
+      children:
+        - id: AS-7
+          kind: arch
+          title: Statische Qualitätsrezepte und promptgesteuerte Agent-Ausführung
+          body: Die bestehende buildfreie TypeScript-pi-Extension erweitert AGENT_RECIPES um die read-only Subagent-Rezepte change-review und relic-hunter und provisioniert sie weiterhin atomar create-if-absent unter .pi/agents. Ein neuer unveränderlicher REVIEW_PROMPT trägt den optionalen Git-Range und verlangt einen Foreground-Spawn von change-review; /trellis:review nutzt den vorhandenen Aktivierungs-Guard und pi.sendUserMessage. CHECK_PROMPT verlangt einen gemeinsamen parallelen Agent-Tool-Turn für spec-sync-check, glossary-warden und relic-hunter mit vollständigem read-only Inline-Fallback. package.json und Lockfile deklarieren @vitest/coverage-v8, sodass der konfigurierte Coverage-Lauf einen LCOV-Report schreiben kann.
+          approved_content_hash: 9875d910a4c2c9e14649e4f9b27a01c9ed0732c5c33993295939723018bab293
+          approved_parent_hash: c609f52a275ad0ed92392ec01b586ad369ee3e6558007497603e1887b80e358e
+          children:
+            - id: DD-14
+              kind: detail_design
+              title: Read-only Rezepte für Change-Review und Reliktsuche
+              body: src/agent-recipes.ts ergänzt change-review.md und relic-hunter.md im bestehenden YAML-Frontmatter-Format mit ausschließlich read-only Werkzeugen read, grep, find und bash. change-review bestimmt ohne Argument den vollständigen Worktree-Diff und verwendet andernfalls den unverändert gelieferten Git-Range; es lädt get_overview für Description und cross_cutting Specs, ermittelt betroffene Stories aus geänderten Pfaden, liest deren Architektur-Specs und belegt Architekturabweichungen, Schichtverletzungen und Cross-Cutting-Verstöße mit Diff- und Spec-Stellen. relic-hunter führt zuerst npx tsc --noUnusedLocals --noUnusedParameters und bei verfügbarer Installation npx knip aus, dokumentiert fehlende Werkzeuge und nutzt dann Heuristiken für Code- und Spec-Relikte. Beide verändern weder Dateien noch Trellis und liefern ausschließlich belegte Vorschläge.
+              approved_content_hash: 2576dc54ca76e30e1b076b730ec01377f84f02ce0709982d75dd880d034798c4
+              approved_parent_hash: 9875d910a4c2c9e14649e4f9b27a01c9ed0732c5c33993295939723018bab293
+              children:
+                - id: UT-14
+                  kind: unit_test
+                  title: Rezeptinhalt und Werkzeuggrenzen
+                  body: Unit-Tests prüfen Frontmatter, read-only Werkzeugliste, Default-Diff und Git-Range, Description-, Architektur- und cross_cutting-Ladevorgaben, geforderte Belegarten sowie die mechanische-first Reihenfolge und sämtliche Code-/Spec-Reliktkategorien. Create-if-absent bleibt für bestehende Dateien bytegenau. Jeder Testname enthält UT-14.
+                  approved_content_hash: 50c088e44c248188143ab735ba6465b3dca69ad72169b5f78b1d73c7002a9b89
+                  approved_parent_hash: 2576dc54ca76e30e1b076b730ec01377f84f02ce0709982d75dd880d034798c4
+                  evidence:
+                    tests:
+                        - test/quality-tools.test.ts::UT-14 Change-Review- und Relic-Hunter-Rezepte > UT-14 begrenzt beide Rezepte auf read-only Werkzeuge und hält Projektkopien synchron
+                        - test/quality-tools.test.ts::UT-14 Change-Review- und Relic-Hunter-Rezepte > UT-14 beschreibt Diff-Quellen, Trellis-Inputs, Architekturprüfungen und konkrete Belege
+                        - test/quality-tools.test.ts::UT-14 Change-Review- und Relic-Hunter-Rezepte > UT-14 führt Reliktmechanik zuerst aus und deckt alle Code- und Spec-Kategorien ab
+                        - test/quality-tools.test.ts::UT-14 Change-Review- und Relic-Hunter-Rezepte > UT-14 erhält ein vorhandenes neues Rezept bytegenau
+                    recorded_at: "2026-08-30T19:31:22Z"
+            - id: DD-15
+              kind: detail_design
+              title: Review-Command und paralleler Drei-Prüfer-Check
+              body: 'src/review-prompt.ts exportiert buildReviewPrompt(range) und erzeugt einen unveränderlichen Auftrag an das Agent-Tool: change-review wird mit run_in_background=false im Foreground gestartet, erhält Projekt und Worktree sowie den optionalen Git-Range unverändert; ohne Range wird ausdrücklich der Worktree-Diff verlangt. src/check-prompt.ts nennt spec-sync-check, glossary-warden und relic-hunter, verlangt ihre drei Spawns in einem gemeinsamen parallelen Tool-Turn, führt Ergebnisse als Vorschläge zusammen und beschreibt für fehlendes Agent-Tool oder jeden fehlenden Typ den vollständigen Inline-Fallback. src/index.ts registriert trellis:review mit dem Aktivierungs-Guard von trellis:init und sendet den gebauten Prompt genau einmal; trellis:check behält seinen Guard und sendet den erweiterten CHECK_PROMPT.'
+              approved_content_hash: d808991e33e01e95718c76c6f6e3f45b4d5ff6ad6e182ec235d9610142e385c5
+              approved_parent_hash: 9875d910a4c2c9e14649e4f9b27a01c9ed0732c5c33993295939723018bab293
+              children:
+                - id: UT-15
+                  kind: unit_test
+                  title: Review-Prompt, Range und Command-Guards
+                  body: Unit-Tests prüfen die Pflichtinhalte des Review-Prompts, Foreground-Semantik, Default-Worktree-Diff und bytegenaue Range-Einbettung. Weitere Harness-Tests prüfen Registrierung, Modus-Guards, Hinweis auf /trellis:on, genau einen Promptversand und den Drei-Agenten-Parallelauftrag samt vollständigem Inline-Fallback. Jeder Testname enthält UT-15.
+                  approved_content_hash: 310da55553ec84a668682076124a29f95e51e0935abacc720dc196b176f5bb53
+                  approved_parent_hash: d808991e33e01e95718c76c6f6e3f45b4d5ff6ad6e182ec235d9610142e385c5
+                  evidence:
+                    tests:
+                        - test/quality-tools.test.ts::UT-15 Review-Prompt, Range und Command-Guards > UT-15 baut Default- und Range-Auftrag für einen Foreground-Spawn
+                        - test/quality-tools.test.ts::UT-15 Review-Prompt, Range und Command-Guards > UT-15 schützt trellis:review und sendet den Range genau einmal
+                        - test/quality-tools.test.ts::UT-15 Review-Prompt, Range und Command-Guards > UT-15 verlangt drei parallele Prüfer und den vollständigen Inline-Fallback
+                    recorded_at: "2026-08-30T19:31:22Z"
+            - id: DD-16
+              kind: detail_design
+              title: Ausführbare Vitest-Coverage
+              body: package.json führt @vitest/coverage-v8 in einer zu Vitest kompatiblen Version unter devDependencies; package-lock.json wird durch npm aktualisiert. Die vorhandene Testausführung bleibt unverändert nutzbar, während der vom Projekt konfigurierte Vitest-Coverage-Lauf den V8-Provider und Reporter lcov ohne fehlendes Provider-Paket ausführen kann.
+              approved_content_hash: c7dae0b2c181cbc0d3ff6fa6804c8a15dc95c9c39f6695e81a2b4e18239d54ec
+              approved_parent_hash: 9875d910a4c2c9e14649e4f9b27a01c9ed0732c5c33993295939723018bab293
+              children:
+                - id: UT-16
+                  kind: unit_test
+                  title: Coverage-Abhängigkeit und LCOV-Lauf
+                  body: Ein statischer Unit-Test prüft Manifest und Lockfile auf @vitest/coverage-v8 als devDependency. Der konfigurierte Testlauf selbst beweist die erfolgreiche Provider-Auflösung und erzeugt coverage/lcov.info. Der Testname enthält UT-16.
+                  approved_content_hash: d8ce1b68a8463ceb9f6c8b10cd86c6145734bcad5f81c7a132d3cf26bc44eb48
+                  approved_parent_hash: c7dae0b2c181cbc0d3ff6fa6804c8a15dc95c9c39f6695e81a2b4e18239d54ec
+                  evidence:
+                    tests:
+                        - test/quality-tools.test.ts::UT-16 Coverage-Abhängigkeit und LCOV-Lauf > UT-16 deklariert und sperrt den kompatiblen V8-Coverage-Provider
+                    recorded_at: "2026-08-30T19:31:22Z"
+            - id: IT-7
+              kind: integration_test
+              title: Aktivierung, Qualitätsrezepte und Commands
+              body: Ein Integrationstest führt Aktivierung mit injizierten Ports aus, prüft die Provisionierung aller fünf Subagent-Rezepte, den Modus-Guard sowie den Versand von Review- und Drei-Prüfer-Prompt. Er belegt Foreground-, Range- und Parallel-Semantik ohne echte Agent-Ausführung. Der Testname enthält IT-7.
+              approved_content_hash: 60e88105a45029f66f356950196463e733c0219e98a4212c937d6eb87f0ae911
+              approved_parent_hash: 9875d910a4c2c9e14649e4f9b27a01c9ed0732c5c33993295939723018bab293
+              evidence:
+                tests:
+                    - test/quality-tools.test.ts::IT-7 Aktivierung, Qualitätsrezepte und Commands > IT-7 provisioniert fünf Rezepte und versendet Review- und Drei-Prüfer-Prompt
+                recorded_at: "2026-08-30T19:31:22Z"
+        - id: AT-7
+          kind: acceptance_test
+          title: End-to-End Qualitätswerkzeuge
+          body: Ein Acceptance-Test aktiviert den Trellis-Modus, prüft die create-if-absent-Provisionierung von change-review und relic-hunter, die Registrierung und Guards von /trellis:review und /trellis:check, die unveränderte Übergabe eines optionalen Git-Range, die Foreground- beziehungsweise parallelen Agent-Anweisungen samt vollständigem Inline-Fallback sowie die installierte Coverage-Abhängigkeit und LCOV-Konfiguration. Der Testname enthält AT-7.
+          covers:
+            - US-7.AC-1
+            - US-7.AC-2
+            - US-7.AC-3
+            - US-7.AC-4
+            - US-7.AC-5
+          approved_content_hash: b1adc6cafc2ef4c2dd70cff63d9a52e540c2c15b3d14a391b5da40ceed432e63
+          approved_parent_hash: c609f52a275ad0ed92392ec01b586ad369ee3e6558007497603e1887b80e358e
+          evidence:
+            tests:
+                - test/quality-tools.test.ts::AT-7 End-to-End Qualitätswerkzeuge > AT-7 erfüllt Review, Reliktsuche, parallelen Check und Coverage-Voraussetzung
+            recorded_at: "2026-08-30T19:31:22Z"
