@@ -8,6 +8,7 @@ import {
   projectPath,
   selectUnhintedDoneStories,
 } from "./file-hints.js";
+import { INTERVIEW_PROMPT } from "./init-prompt.js";
 import { TrellisMcpClient, type SpecsForPathResult } from "./mcp-client.js";
 import { formatKanbanStatus, formatStatusLine } from "./status.js";
 
@@ -97,6 +98,17 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
         } catch (error) {
           ctx.ui.notify(`Trellis-Status nicht verfügbar: ${messageOf(error)}`, "error");
         }
+      },
+    });
+
+    pi.registerCommand("trellis:init", {
+      description: "Geführtes Trellis-Projekt-Interview starten",
+      handler: async () => {
+        if (!active) {
+          emit("/trellis:init erfordert einen aktiven Trellis-Modus. Führe zuerst /trellis:on aus.");
+          return;
+        }
+        pi.sendUserMessage(INTERVIEW_PROMPT);
       },
     });
 
