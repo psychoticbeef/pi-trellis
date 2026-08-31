@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TrellisOverview } from "../src/context.js";
 import { createTrellisExtension } from "../src/index.js";
+import { REVIEWERS } from "../src/review-gate.js";
 import { createPiHarness } from "./harness.js";
 
 const overview: TrellisOverview = {
@@ -8,7 +9,7 @@ const overview: TrellisOverview = {
   stories: [{ id: "US-9", title: "Feature", status: "in_progress", gates_open: true }],
 };
 
-describe("AT-12 IT-9 Automatischer Sitzungsstart und einmaliges finish-Gate", () => {
+describe("AT-12 IT-9 Automatischer Sitzungsstart und Review-Gate-Reset", () => {
   it("AT-12 IT-9 erfüllt Auto-Aktivierung, sticky Off, Review-Anweisung, Re-Call und Story-Isolation", async () => {
     let overviewCalls = 0;
     const harness = createPiHarness();
@@ -40,8 +41,17 @@ describe("AT-12 IT-9 Automatischer Sitzungsstart und einmaliges finish-Gate", ()
     };
     const first = await harness.toolCall()(finish, context) as { block: boolean; reason: string };
     expect(first.block).toBe(true);
-    for (const text of ["pre-finish-review", "relic-hunter", "Agent-Tool", "parallel", "inline", "Wiege"]) {
+    for (const text of [...REVIEWERS, "Agent-Tool", "parallel", "read-only"]) {
       expect(first.reason).toContain(text);
+    }
+    for (const [index, reviewer] of REVIEWERS.entries()) {
+      const review = {
+        toolCallId: `review-${index}`,
+        toolName: "Agent",
+        input: { subagent_type: reviewer, run_in_background: true },
+      };
+      await harness.toolCall()(review, context);
+      await harness.toolResult()({ ...review, isError: false }, context);
     }
     await expect(harness.toolCall()({ ...finish, toolCallId: "finish-2" }, context))
       .resolves.toBeUndefined();

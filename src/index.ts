@@ -14,7 +14,12 @@ import {
 import { INTERVIEW_PROMPT } from "./init-prompt.js";
 import { TrellisMcpClient, type SpecsForPathResult } from "./mcp-client.js";
 import { buildReviewPrompt } from "./review-prompt.js";
-import { finishStoryIdFromToolCall, reviewGateReason } from "./review-gate.js";
+import {
+  finishStoryIdFromToolCall,
+  reviewerFromAgentToolCall,
+  ReviewGate,
+  type Reviewer,
+} from "./review-gate.js";
 import { formatKanbanStatus, formatStatusLine } from "./status.js";
 
 export interface ExtensionDependencies {
@@ -60,7 +65,8 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
       before: string | undefined;
     }>();
     const hintedStoryIds = new Set<string>();
-    const reviewedStoryIds = new Set<string>();
+    const reviewGate = new ReviewGate();
+    const pendingReviews = new Map<string, { storyId: string; reviewer: Reviewer }>();
 
     const emit = (content: string): void => {
       pi.sendMessage({ customType: "trellis", content, display: true });
@@ -109,7 +115,8 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
       statusUpdateGeneration += 1;
       active = undefined;
       disabledForSession = false;
-      reviewedStoryIds.clear();
+      reviewGate.reset();
+      pendingReviews.clear();
       hintedStoryIds.clear();
       pendingFileChanges.clear();
       ctx.ui.setStatus("trellis", undefined);
@@ -187,21 +194,30 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
     });
 
     pi.on("tool_call", async (event, ctx) => {
-      const finishStoryId = finishStoryIdFromToolCall(
-        event.toolName,
-        event.input as Record<string, unknown>,
-      );
-      if (finishStoryId && !reviewedStoryIds.has(finishStoryId)) {
-        reviewedStoryIds.add(finishStoryId);
-        return { block: true, reason: reviewGateReason(finishStoryId) };
+      const input = event.input as Record<string, unknown>;
+      const finishStoryId = finishStoryIdFromToolCall(event.toolName, input);
+      if (finishStoryId) {
+        const decision = reviewGate.finish(finishStoryId);
+        if (decision.block) return { block: true, reason: decision.reason };
+        if (decision.warning) ctx.ui.notify(decision.warning, "warning");
+        return;
+      }
+
+      const reviewer = reviewerFromAgentToolCall(event.toolName, input);
+      if (reviewer) {
+        const storyId = reviewGate.storyForReviewSpawn();
+        if (!storyId) return;
+        input.run_in_background = false;
+        pendingReviews.set(event.toolCallId, { storyId, reviewer });
+        return;
       }
 
       if (event.toolName !== "edit" && event.toolName !== "write") return;
       const state = active;
       if (!state) return;
-      const input = event.input as { path?: unknown };
-      if (typeof input.path !== "string" || input.path.length === 0) return;
-      const absolutePath = normalizeFilePath(input.path, ctx.cwd);
+      const pathInput = event.input as { path?: unknown };
+      if (typeof pathInput.path !== "string" || pathInput.path.length === 0) return;
+      const absolutePath = normalizeFilePath(pathInput.path, ctx.cwd);
       try {
         pendingFileChanges.set(event.toolCallId, {
           state,
@@ -215,6 +231,15 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
     });
 
     pi.on("tool_result", async (event, ctx) => {
+      const pendingReview = pendingReviews.get(event.toolCallId);
+      pendingReviews.delete(event.toolCallId);
+      if (pendingReview) {
+        if (event.isError === false) {
+          reviewGate.recordSuccess(pendingReview.storyId, pendingReview.reviewer);
+        }
+        return;
+      }
+
       if (event.toolName !== "edit" && event.toolName !== "write") return;
       const pending = pendingFileChanges.get(event.toolCallId);
       pendingFileChanges.delete(event.toolCallId);
