@@ -14,9 +14,11 @@
 - **US-8** — Context-Hygiene im Trellis-Modus
 - **US-9** — Auto-Aktivierung und Review-Gate vor finish
 - **US-10** — Review-Gate v2 mit verifizierten Reviews
+- **US-11** — Subagent-Rezepte global aus Git-Dateien installieren
 
 ## Glossary
 
+- **agent-dir** — Basisverzeichnis aus PI_CODING_AGENT_DIR oder ~/.pi/agent.
 - **Aufbewahrungsfenster** — Anzahl abgeschlossener Turns, die externe read-Results vollständig bleiben.
 - **Auto-Load** — Projektlokales automatisches Laden der Extension durch pi.
 - **Board-Adresse** — Konfigurierbare Live-Board-Basisadresse; Standard http://127.0.0.1:7420.
@@ -26,12 +28,13 @@
 - **Fail-open** — Warnendes Durchlassen von finish nach drei Blockierungen.
 - **Interview-Prompt** — Strukturierte LLM-Anleitung für das geführte Projekt-Interview.
 - **Kanban-Zusammenfassung** — UI-only Übersicht über Story-Zähler, aktive Arbeit und Risiken.
+- **Nutzer-Override** — Projektlokales Subagent-Rezept mit Vorrang vor der globalen Datei.
 - **pi-Package** — Über package.json oder Konventionsverzeichnisse ladbares pi-Ressourcenpaket.
 - **Reliktsuche** — Read-only Suche nach Code- und Spec-Relikten.
 - **Review-Gate** — Finish-Sperre bis zur Review-Freigabe oder zum Fail-open.
 - **Review-Runde** — Storybezogene Prüfung durch fünf erfolgreiche read-only Agent-Ergebnisse vor finish.
 - **Statusline-Eintrag** — Dezente aktuelle Anzeige der laufenden Story und ihrer Gates.
-- **Subagent-Rezept** — Projektlokale Markdown-Definition eines spezialisierten Agenten.
+- **Subagent-Rezept** — Markdown-Definition eines spezialisierten Agenten; kanonisch im pi-Package, global installierbar und projektlokal überschreibbar.
 - **Trellis-Kontextblock** — Pro User-Turn injizierte Trellis-Projektübersicht unter 1500 Zeichen.
 - **Trellis-Modus** — Aktivierte Trellis-Kontextinjektion einer pi-Sitzung.
 - **Änderungsreview** — Read-only Architekturprüfung großer Änderungen.
