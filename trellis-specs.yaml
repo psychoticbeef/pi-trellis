@@ -16,6 +16,8 @@ glossary:
       definition: Projektlokales automatisches Laden der Extension durch pi.
     - term: Board-Adresse
       definition: Konfigurierbare Live-Board-Basisadresse; Standard http://127.0.0.1:7420.
+    - term: Branch-Gate-Hook
+      definition: Hook, der direkte Commits auf develop blockiert.
     - term: Context-Hygiene
       definition: Verlustfreie Bereinigung überholter LLM-Kontextinhalte.
     - term: Dateihinweis
@@ -24,14 +26,24 @@ glossary:
       definition: Parallele Prüfung durch drei Qualitätsagenten.
     - term: Fail-open
       definition: Warnendes Durchlassen von finish nach drei Blockierungen.
+    - term: Gate-Rezept
+      definition: Stackbezogene CLI-Konfiguration für Lint, Tests und Coverage.
     - term: Interview-Prompt
       definition: Strukturierte LLM-Anleitung für das geführte Projekt-Interview.
     - term: Kanban-Zusammenfassung
       definition: UI-only Übersicht über Story-Zähler, aktive Arbeit und Risiken.
     - term: Nutzer-Override
       definition: Projektlokales Subagent-Rezept mit Vorrang vor der globalen Datei.
+    - term: Onboarding-Modus
+      definition: Zustandsabhängige Trellis-Ersteinrichtung über /trellis:init.
+    - term: Onboarding-Prompt
+      definition: LLM-Anleitung zur sicheren Trellis-Ersteinrichtung.
+    - term: pi-Harness
+      definition: Test-Doppel der pi-Extension-API.
     - term: pi-Package
       definition: Über package.json oder Konventionsverzeichnisse ladbares pi-Ressourcenpaket.
+    - term: Projekt-Skeleton
+      definition: Minimale initiale Datei- und Verzeichnisstruktur.
     - term: Reliktsuche
       definition: Read-only Suche nach Code- und Spec-Relikten.
     - term: Review-Gate
@@ -46,15 +58,17 @@ glossary:
       definition: Pro User-Turn injizierte Trellis-Projektübersicht unter 1500 Zeichen.
     - term: Trellis-Modus
       definition: Aktivierte Trellis-Kontextinjektion einer pi-Sitzung.
+    - term: Vorab-Commit
+      definition: Vollständiger Projekt-Commit unmittelbar vor trellis init.
     - term: Änderungsreview
       definition: Read-only Architekturprüfung großer Änderungen.
 counters:
-    AS: 11
-    AT: 14
-    DD: 25
-    IT: 11
-    US: 11
-    UT: 25
+    AS: 12
+    AT: 15
+    DD: 28
+    IT: 12
+    US: 12
+    UT: 28
     ac:US-1: 4
     ac:US-2: 4
     ac:US-3: 4
@@ -66,6 +80,7 @@ counters:
     ac:US-9: 6
     ac:US-10: 7
     ac:US-11: 5
+    ac:US-12: 6
 stories:
     - id: US-1
       kind: story
@@ -450,15 +465,26 @@ stories:
     - id: US-5
       kind: story
       title: Geführtes Projekt-Interview über /trellis:init
-      body: Der Slash-Command /trellis:init erfordert einen aktiven Trellis-Modus und injiziert über pi.sendUserMessage einen im Code hinterlegten Interview-Prompt. Dieser führt das LLM schrittweise durch Projektbeschreibung, bestätigte Story-Vorschläge mit Given/When/Then-Akzeptanzkriterien, Querschnittsthemen, Glossar-Grundstock sowie abschließendes approve_tree und Refinement.
+      body: Der Slash-Command /trellis:init wählt anhand der Trellis-Verdrahtung zwischen Onboarding-Prompt und dem im Code hinterlegten Interview-Prompt. Der unveränderte Interview-Prompt führt das LLM schrittweise durch Projektbeschreibung, bestätigte Story-Vorschläge mit Given/When/Then-Akzeptanzkriterien, Querschnittsthemen, Glossar-Grundstock sowie abschließendes approve_tree und Refinement.
       status: done
+      paths:
+        - src/init-prompt.ts
+        - src/onboarding-prompt.ts
+        - src/index.ts
+        - README.md
+        - test/init-command.test.ts
+        - test/init-prompt.test.ts
+        - test/integration-init.test.ts
+        - test/acceptance-init.test.ts
+        - test/onboarding-prompt.test.ts
+        - test/readme.test.ts
       acceptance_criteria:
         - id: US-5.AC-1
-          given: Der Trellis-Modus ist deaktiviert.
+          given: Das aktuelle Projekt besitzt keine gültige trellis-project-Zeile.
           when: Der User führt /trellis:init aus.
-          then: Es wird kein Interview gestartet und der User erhält die konkrete Fehlermeldung, dass /trellis:init einen aktiven Trellis-Modus erfordert und zuerst /trellis:on auszuführen ist.
+          then: Der Command sendet genau eine User-Nachricht mit dem Onboarding-Prompt und dem anschließenden bestehenden Interview-Prompt.
         - id: US-5.AC-2
-          given: Der Trellis-Modus ist aktiviert.
+          given: Das aktuelle Projekt besitzt eine gültige trellis-project-Zeile.
           when: Der User führt /trellis:init aus.
           then: Der Command injiziert über pi.sendUserMessage genau einen im Code hinterlegten, strukturierten Interview-Prompt mit weniger als 2500 Zeichen.
         - id: US-5.AC-3
@@ -469,28 +495,28 @@ stories:
           given: Der User hat die vorgeschlagenen Inhalte bestätigt und die Spec-Bäume wurden angelegt.
           when: Das Interview abgeschlossen wird.
           then: Der Interview-Prompt weist das LLM abschließend an, die vollständigen Bäume zu lesen, sie mit aktuellen Hashes via approve_tree zu approven und die Stories nach erfolgreicher Prüfung zu refinen.
-      approved_content_hash: a92281da9969b41ef36601613ff964c3ed5b829fa29edecf46a8ebc05b9c35e1
+      approved_content_hash: 26f5d5c339b187b6c548d12a127aadd8999f877850609a9854187f1422d06953
       children:
         - id: AS-5
           kind: arch
-          title: Slash-Command mit statischem Interview-Prompt
-          body: 'Die TypeScript-pi-Extension exportiert einen statischen Interview-Prompt aus einem eigenen Modul und registriert /trellis:init neben den bestehenden Commands. Der Handler nutzt ausschließlich den In-Memory-Aktivierungszustand des Trellis-Modus: ohne aktiven Zustand sendet er über die vorhandene Trellis-Ausgabe eine konkrete Anleitung zu /trellis:on; mit aktivem Zustand übergibt er den Interview-Prompt genau einmal als String an pi.sendUserMessage. Der Prompt bleibt unter 2500 Zeichen und instruiert das LLM zu einem schrittweisen, bestätigungsgebundenen Trellis-Projekt-Interview einschließlich set_description, 2–3 Story-Vorschlägen mit Given/When/Then-Akzeptanzkriterien, cross_cutting Specs, ultra-kurzem Glossar-Grundstock, get_tree, approve_tree und Refinement. Unit-, Integrations- und Acceptance-Tests sichern Inhalt und Verdrahtung.'
-          approved_content_hash: c1dea466cbaccf25b4b2710374520fa23ba2c0f1b5a2bcdd0c6191116ac15f25
-          approved_parent_hash: a92281da9969b41ef36601613ff964c3ed5b829fa29edecf46a8ebc05b9c35e1
+          title: Slash-Command mit zustandsabhängigem Interview-Prompt
+          body: Die TypeScript-pi-Extension exportiert einen statischen Interview-Prompt aus einem eigenen Modul und registriert /trellis:init neben den bestehenden Commands. Der Handler prüft die Trellis-Verdrahtung über die Projektfindung statt den In-Memory-Aktivierungszustand des Trellis-Modus. Ohne gültige trellis-project-Zeile sendet er genau eine Komposition aus Onboarding-Prompt und Interview-Prompt; mit gültiger Zeile übergibt er den Interview-Prompt genau einmal als String an pi.sendUserMessage. Der Interview-Prompt bleibt unter 2500 Zeichen und instruiert das LLM zu einem schrittweisen, bestätigungsgebundenen Trellis-Projekt-Interview einschließlich set_description, 2–3 Story-Vorschlägen mit Given/When/Then-Akzeptanzkriterien, cross_cutting Specs, ultra-kurzem Glossar-Grundstock, get_tree, approve_tree und Refinement. Unit-, Integrations- und Acceptance-Tests sichern Inhalt und Verdrahtung.
+          approved_content_hash: 9185c6e253bedc3fc3b11ae0b84daa99bc4e228b34577b5027d23b28a02ce83a
+          approved_parent_hash: 26f5d5c339b187b6c548d12a127aadd8999f877850609a9854187f1422d06953
           children:
             - id: DD-10
               kind: detail_design
-              title: Aktivierungsgeschützter init-Command
-              body: src/index.ts registriert trellis:init mit einer knappen Beschreibung. Der Handler prüft den bestehenden active-Zustand. Ohne aktiven Trellis-Modus ruft er emit mit einer konkreten Fehlermeldung auf, die /trellis:on nennt, und beendet sich ohne pi.sendUserMessage. Mit aktivem Zustand ruft er pi.sendUserMessage(INTERVIEW_PROMPT) genau einmal auf. Er führt selbst keine Trellis-Mutationen aus; diese bleiben Aufgabe des durch den Interview-Prompt angeleiteten LLM.
-              approved_content_hash: 261f7315e4961f203d5b124e3cca039ad73ef1676e4ea6aee93df262ab1b30cb
-              approved_parent_hash: c1dea466cbaccf25b4b2710374520fa23ba2c0f1b5a2bcdd0c6191116ac15f25
+              title: Zustandsabhängiger init-Command
+              body: src/index.ts registriert trellis:init mit einer knappen Beschreibung. Der Handler verwendet findTrellisProject für das aktuelle Arbeitsverzeichnis. Ohne gültige trellis-project-Zeile ruft er pi.sendUserMessage mit der Onboarding-/Interview-Komposition genau einmal auf. Mit gültiger Verdrahtung ruft er pi.sendUserMessage(INTERVIEW_PROMPT) genau einmal auf. Er führt selbst keine Trellis-Mutationen aus; diese bleiben Aufgabe des durch die Prompts angeleiteten LLM.
+              approved_content_hash: 88cecec71aa56247e4b86dc4a31530bddd0b72e0221c81bc8c8843b92e3e725b
+              approved_parent_hash: 9185c6e253bedc3fc3b11ae0b84daa99bc4e228b34577b5027d23b28a02ce83a
               children:
                 - id: UT-10
                   kind: unit_test
-                  title: UT-10 Guard und Nachrichtenversand des init-Commands
-                  body: 'Unit-Tests registrieren die Extension am Pi-Harness und prüfen: trellis:init ist vorhanden; im deaktivierten Trellis-Modus wird eine konkrete Meldung mit Trellis-Modus und /trellis:on ausgegeben und keine User-Nachricht gesendet; nach trellis:on wird exakt INTERVIEW_PROMPT als einzige User-Nachricht gesendet. Jeder Testname enthält UT-10.'
-                  approved_content_hash: e231546c27cd0ed173bf17daf5709174703c08c2c45bb075e9067a318727880b
-                  approved_parent_hash: 261f7315e4961f203d5b124e3cca039ad73ef1676e4ea6aee93df262ab1b30cb
+                  title: UT-10 Zustand und Nachrichtenversand des init-Commands
+                  body: 'Unit-Tests registrieren die Extension am pi-Harness und prüfen: trellis:init ist vorhanden; ohne gültige Trellis-Verdrahtung wird genau eine User-Nachricht mit Onboarding-Prompt und Interview-Prompt gesendet; mit gültiger trellis-project-Zeile wird exakt INTERVIEW_PROMPT als einzige User-Nachricht gesendet. Jeder Testname enthält UT-10.'
+                  approved_content_hash: 46ce5e2850fb6addd6229a68d941fbeab9a81dd77539aec0ec77a236de0d2e44
+                  approved_parent_hash: 88cecec71aa56247e4b86dc4a31530bddd0b72e0221c81bc8c8843b92e3e725b
                   evidence:
                     tests:
                         - test/init-command.test.ts::UT-10 Guard und Nachrichtenversand des init-Commands > UT-10 registriert trellis:init und weist ohne Trellis-Modus konkret auf trellis:on hin
@@ -501,7 +527,7 @@ stories:
               title: Interview-Prompt als testbares Template
               body: 'src/init-prompt.ts exportiert den unveränderlichen String INTERVIEW_PROMPT. Er benennt das geführte Vorgehen in klaren Schritten: Projektbeschreibung mit set_description; Vorschlag von 2–3 Stories samt Given/When/Then-Akzeptanzkriterien vor jeder Anlage; Querschnittsthemen als cross_cutting Specs; ultra-kurzer Glossar-Grundstock; abschließend vollständige Bäume per get_tree lesen, mit aktuellen Hashes via approve_tree approven und danach refinen. Der Text fordert Rückfragen und ausdrückliche User-Bestätigung vor dem Anlegen und hat weniger als 2500 JavaScript-Zeichen.'
               approved_content_hash: 08d4000516abe2a36aee749ac8e335cdec640bdae0f10a71161abef2d211c9e6
-              approved_parent_hash: c1dea466cbaccf25b4b2710374520fa23ba2c0f1b5a2bcdd0c6191116ac15f25
+              approved_parent_hash: 9185c6e253bedc3fc3b11ae0b84daa99bc4e228b34577b5027d23b28a02ce83a
               children:
                 - id: UT-9
                   kind: unit_test
@@ -516,25 +542,25 @@ stories:
                     recorded_at: "2026-08-30T15:25:23Z"
             - id: IT-5
               kind: integration_test
-              title: IT-5 Aktivierung und init-Command im Pi-Harness
-              body: Eine Integration-Suite aktiviert den Trellis-Modus über trellis:on mit Projektfindung und Overview-Abfrage, führt danach trellis:init aus und beobachtet am Pi-Harness genau eine durch pi.sendUserMessage ausgelöste User-Nachricht mit dem exportierten Interview-Prompt. Vor der Aktivierung bleibt derselbe Aufruf ohne User-Nachricht. Der Testname enthält IT-5.
-              approved_content_hash: 4d510a619de18d3717ab18b0560cefa56333885e91c5dc3d9255ee7b2e4ac328
-              approved_parent_hash: c1dea466cbaccf25b4b2710374520fa23ba2c0f1b5a2bcdd0c6191116ac15f25
+              title: IT-5 Zustandserkennung und init-Command im pi-Harness
+              body: 'Eine Integration-Suite führt trellis:init in einem verdrahteten und einem unverdrahteten temporären Projekt aus. Am pi-Harness beobachtet sie jeweils genau eine durch pi.sendUserMessage ausgelöste User-Nachricht: INTERVIEW_PROMPT bei gültiger trellis-project-Zeile und die Onboarding-/Interview-Komposition ohne Verdrahtung. Der Testname enthält IT-5.'
+              approved_content_hash: e3ed4057df5a2775a58552f68a2cec7a0264b79f29e73d1d5eb8494f463fb58d
+              approved_parent_hash: 9185c6e253bedc3fc3b11ae0b84daa99bc4e228b34577b5027d23b28a02ce83a
               evidence:
                 tests:
                     - test/integration-init.test.ts::IT-5 Aktivierung und init-Command im Pi-Harness > IT-5 sendet den Interview-Prompt ausschließlich nach erfolgreicher Aktivierung
                 recorded_at: "2026-08-30T15:25:23Z"
         - id: AT-5
           kind: acceptance_test
-          title: AT-5 Geführtes Projekt-Interview über den Slash-Command
-          body: Eine Black-box-Suite registriert die Extension an einem Pi-Harness. Sie prüft, dass /trellis:init bei deaktiviertem Trellis-Modus eine konkrete Fehlermeldung ausgibt und keine User-Nachricht sendet, nach erfolgreicher Aktivierung genau einen Interview-Prompt via pi.sendUserMessage sendet und dieser unter 2500 Zeichen alle Schritte bis approve_tree und Refinement enthält. Der Testname enthält AT-5.
+          title: AT-5 Zustandsabhängiges geführtes Projekt-Interview
+          body: Eine Black-box-Suite registriert die Extension an einem pi-Harness. Sie prüft, dass /trellis:init ohne gültige trellis-project-Zeile genau eine Onboarding-/Interview-Komposition und mit gültiger Verdrahtung genau den unveränderten Interview-Prompt via pi.sendUserMessage sendet. Der Interview-Prompt bleibt unter 2500 Zeichen und enthält alle Schritte bis approve_tree und Refinement. Der Testname enthält AT-5.
           covers:
             - US-5.AC-1
             - US-5.AC-2
             - US-5.AC-3
             - US-5.AC-4
-          approved_content_hash: 3a1b35ab446f5baf6cc9ea1423b4ddf492617847fb1add5115a833bdea6639de
-          approved_parent_hash: a92281da9969b41ef36601613ff964c3ed5b829fa29edecf46a8ebc05b9c35e1
+          approved_content_hash: 460092b2eb31548b11b0b01a02f18abbd5558253875bcffe5ac62f6003ddb48a
+          approved_parent_hash: 26f5d5c339b187b6c548d12a127aadd8999f877850609a9854187f1422d06953
           evidence:
             tests:
                 - test/acceptance-init.test.ts::AT-5 Geführtes Projekt-Interview über den Slash-Command > AT-5 erfüllt Modus-Guard, Einzelinjektion, Längenlimit und Interview-Abschluss
@@ -603,8 +629,8 @@ stories:
             - id: DD-12
               kind: detail_design
               title: Check-Prompt und Slash-Command
-              body: src/check-prompt.ts exportiert CHECK_PROMPT als unveränderlichen String. Er fordert das LLM auf, die Verfügbarkeit des Agent-Tools und der Typen spec-sync-check, glossary-warden und relic-hunter zu prüfen, alle drei bei Verfügbarkeit in einem gemeinsamen parallelen Tool-Turn zu spawnen, ihre Ergebnisse als Vorschläge zusammenzuführen und bei fehlendem Agent-Tool oder fehlendem Typ die vollständige Diff-/Done-Baum-, Glossar- und Reliktprüfung inline auszuführen. src/index.ts registriert trellis:check. Der Handler verwendet denselben Aktivierungs-Guard wie trellis:init und sendet bei aktivem Trellis-Modus CHECK_PROMPT genau einmal über pi.sendUserMessage; ohne aktiven Modus verweist er auf /trellis:on.
-              approved_content_hash: aeef0d62ea4bf440bb2ca231aaf0a1a1a6c985c03589b60fd99adbdc556ab494
+              body: src/check-prompt.ts exportiert CHECK_PROMPT als unveränderlichen String. Er fordert das LLM auf, die Verfügbarkeit des Agent-Tools und der Typen spec-sync-check, glossary-warden und relic-hunter zu prüfen, alle drei bei Verfügbarkeit in einem gemeinsamen parallelen Tool-Turn zu spawnen, ihre Ergebnisse als Vorschläge zusammenzuführen und bei fehlendem Agent-Tool oder fehlendem Typ die vollständige Diff-/Done-Baum-, Glossar- und Reliktprüfung inline auszuführen. src/index.ts registriert trellis:check. Der Handler besitzt einen eigenständigen Aktivierungs-Guard für den Trellis-Modus und sendet bei aktivem Trellis-Modus CHECK_PROMPT genau einmal über pi.sendUserMessage; ohne aktiven Modus verweist er auf /trellis:on.
+              approved_content_hash: b423fa0e2064b961507c6afea84dcc5fc441acb782a3a36baea5e5c561b5c908
               approved_parent_hash: f6bbc4bb193e1d8d134fc0b6e4c976a5d009b8101b454f4d8184eecd7266bcfb
               children:
                 - id: UT-12
@@ -612,7 +638,7 @@ stories:
                   title: UT-12 Check-Prompt und Command-Guard
                   body: Unit-Tests prüfen die Pflichtinhalte Agent-Tool, spec-sync-check, glossary-warden, relic-hunter, paralleler Spawn und vollständiger Inline-Fallback. Harness-Tests prüfen Registrierung, Modus-Guard, Hinweis auf /trellis:on und exakt einen Versand von CHECK_PROMPT nach Aktivierung. Jeder Testname enthält UT-12.
                   approved_content_hash: fecc3a86e866a8b26d9ac62501f10233bd6d24e1516a5264f79e156ae99badf8
-                  approved_parent_hash: aeef0d62ea4bf440bb2ca231aaf0a1a1a6c985c03589b60fd99adbdc556ab494
+                  approved_parent_hash: b423fa0e2064b961507c6afea84dcc5fc441acb782a3a36baea5e5c561b5c908
                   evidence:
                     tests:
                         - test/check-command.test.ts::UT-12 Check-Prompt und Command-Guard > UT-12 beschreibt parallele Agent-Spawns und den vollständigen Inline-Fallback
@@ -744,8 +770,8 @@ stories:
             - id: DD-15
               kind: detail_design
               title: Review-Command und paralleler Drei-Prüfer-Check
-              body: 'src/review-prompt.ts exportiert buildReviewPrompt(range) und erzeugt einen unveränderlichen Auftrag an das Agent-Tool: change-review wird mit run_in_background=false im Foreground gestartet, erhält Projekt und Worktree sowie den optionalen Git-Range unverändert; ohne Range wird ausdrücklich der Worktree-Diff verlangt. src/check-prompt.ts nennt spec-sync-check, glossary-warden und relic-hunter, verlangt ihre drei Spawns in einem gemeinsamen parallelen Tool-Turn, führt Ergebnisse als Vorschläge zusammen und beschreibt für fehlendes Agent-Tool oder jeden fehlenden Typ den vollständigen Inline-Fallback. src/index.ts registriert trellis:review mit dem Aktivierungs-Guard von trellis:init und sendet den gebauten Prompt genau einmal; trellis:check behält seinen Guard und sendet den erweiterten CHECK_PROMPT.'
-              approved_content_hash: d808991e33e01e95718c76c6f6e3f45b4d5ff6ad6e182ec235d9610142e385c5
+              body: 'src/review-prompt.ts exportiert buildReviewPrompt(range) und erzeugt einen unveränderlichen Auftrag an das Agent-Tool: change-review wird mit run_in_background=false im Foreground gestartet, erhält Projekt und Worktree sowie den optionalen Git-Range unverändert; ohne Range wird ausdrücklich der Worktree-Diff verlangt. src/check-prompt.ts nennt spec-sync-check, glossary-warden und relic-hunter, verlangt ihre drei Spawns in einem gemeinsamen parallelen Tool-Turn, führt Ergebnisse als Vorschläge zusammen und beschreibt für fehlendes Agent-Tool oder jeden fehlenden Typ den vollständigen Inline-Fallback. src/index.ts registriert trellis:review mit einem eigenständigen Aktivierungs-Guard für den Trellis-Modus und sendet den gebauten Prompt genau einmal; trellis:check behält seinen Guard und sendet den erweiterten CHECK_PROMPT.'
+              approved_content_hash: 22e3e773d5d22c40eedf701be7d51919cb9606db13025d36f809efb782274fdb
               approved_parent_hash: b8424ada1ecd8235acd21c4a8eeb7d76c91c071f704adb6ee6bbb453fa5d4e88
               children:
                 - id: UT-15
@@ -753,7 +779,7 @@ stories:
                   title: Review-Prompt, Range und Command-Guards
                   body: Unit-Tests prüfen die Pflichtinhalte des Review-Prompts, Foreground-Semantik, Default-Worktree-Diff und bytegenaue Range-Einbettung. Weitere Harness-Tests prüfen Registrierung, Modus-Guards, Hinweis auf /trellis:on, genau einen Promptversand und den Drei-Agenten-Parallelauftrag samt vollständigem Inline-Fallback. Jeder Testname enthält UT-15.
                   approved_content_hash: 310da55553ec84a668682076124a29f95e51e0935abacc720dc196b176f5bb53
-                  approved_parent_hash: d808991e33e01e95718c76c6f6e3f45b4d5ff6ad6e182ec235d9610142e385c5
+                  approved_parent_hash: 22e3e773d5d22c40eedf701be7d51919cb9606db13025d36f809efb782274fdb
                   evidence:
                     tests:
                         - test/quality-tools.test.ts::UT-15 Review-Prompt, Range und Command-Guards > UT-15 baut Default- und Range-Auftrag für einen Foreground-Spawn
@@ -1291,3 +1317,137 @@ stories:
                 - test/acceptance-agent-install.test.ts::AT-14 Automatisch verfügbare globale Subagent-Rezepte > AT-14 installiert kanonisch global, schützt Dev-Repos und hält Zielprojekte sauber
                 - test/acceptance-package.test.ts::AT-4 Installierbares und dokumentiertes pi-Package > AT-14 packt postinstall und alle kanonischen Subagent-Rezepte
             recorded_at: "2026-08-31T12:09:42Z"
+    - id: US-12
+      kind: story
+      title: Onboarding-Modus für /trellis:init
+      body: /trellis:init erkennt die Trellis-Verdrahtung des aktuellen Projekts. Ohne trellis-project-Zeile führt ein Onboarding-Prompt sicher durch Repository-Inspektion, Skeleton, Vorab-Commit, CLI-basierte Trellis-Einrichtung, stackgerechte Gates und doctor, bevor er nahtlos in den bestehenden Interview-Prompt übergeht.
+      status: done
+      paths:
+        - src/onboarding-prompt.ts
+        - src/init-prompt.ts
+        - src/index.ts
+        - README.md
+        - test/init-command.test.ts
+        - test/init-prompt.test.ts
+        - test/integration-init.test.ts
+        - test/acceptance-init.test.ts
+        - test/onboarding-prompt.test.ts
+        - test/readme.test.ts
+      acceptance_criteria:
+        - id: US-12.AC-1
+          given: Die Extension ist geladen.
+          when: Der User führt /trellis:init aus.
+          then: Der Command prüft das aktuelle Projekt auf eine gültige trellis-project-Zeile; mit Verdrahtung injiziert er den bestehenden Interview-Prompt, ohne Verdrahtung den Onboarding-Prompt.
+        - id: US-12.AC-2
+          given: Ein noch nicht mit Trellis verdrahtetes Verzeichnis wird onboarded.
+          when: Der Agent den Onboarding-Prompt ausführt.
+          then: Er inspiziert zuerst das Repository, erfragt fehlende Angaben zu Zweck, Sprache und Stack, initialisiert bei Bedarf Git mit develop und erstellt ausschließlich fehlende Skeleton-Dateien, ohne vorhandene Dateien zu überschreiben.
+        - id: US-12.AC-3
+          given: Skeleton oder vorbereitende Dateien wurden erzeugt.
+          when: Der Agent Trellis verdrahtet.
+          then: Er committet ausdrücklich alle Änderungen vor trellis init, führt erst danach trellis init --name <name> --repo <pfad> über die Shell aus und versucht nach Installation des Branch-Gate-Hooks keine direkten develop-Commits.
+        - id: US-12.AC-4
+          given: Sprache und Stack sind bekannt.
+          when: Der Agent die Gates konfiguriert.
+          then: Er verwendet ausschließlich trellis config über die CLI, nutzt die vorgegebenen Rezepte für TypeScript mit vitest, Go oder Python mit pytest beziehungsweise leitet für andere Stacks JUnit-XML plus LCOV oder Go-coverprofile her und schließt mit trellis doctor ab.
+        - id: US-12.AC-5
+          given: trellis doctor bestätigt die Verdrahtung.
+          when: Das Onboarding abgeschlossen wird.
+          then: Derselbe Agent fährt ohne erneuten Command mit dem unveränderten bestehenden Interview-Prompt fort.
+        - id: US-12.AC-6
+          given: Ein neuer User liest den Setup-Abschnitt.
+          when: Er den empfohlenen Einrichtungsweg sucht.
+          then: README beschreibt /trellis:init als Onboarding-Weg und behält den bisherigen manuellen Ablauf als Fallback bei.
+      approved_content_hash: d2b742700000264a655f1543416f1909ea5de4b1af55e2ee3c3772f5d9114a72
+      children:
+        - id: AS-12
+          kind: arch
+          title: Zustandsgesteuerter init-Command mit komponierten Prompts
+          body: Der registrierte /trellis:init-Command verwendet findTrellisProject mit dem bestehenden injizierbaren Read-Port als Zustandsprüfung, unabhängig vom aktiven Trellis-Modus. Bei gültiger trellis-project-Zeile sendet er unverändert INTERVIEW_PROMPT; bei fehlender oder ungültiger Verdrahtung sendet er genau eine Komposition aus ONBOARDING_PROMPT und INTERVIEW_PROMPT. ONBOARDING_PROMPT ist ein statisches, separat testbares Template. Es erzwingt Repository-Inspektion, fehlende Nutzerangaben, non-destructive Skeleton-Erstellung, Git-Initialisierung auf develop, vollständigen Commit vor trellis init, Shell-Ausführung von trellis init, ausschließlich CLI-basierte Gate-Konfiguration, stackgerechte JUnit-/Coverage-Artefakte, doctor-Abnahme und den anschließenden Übergang zum Interview-Prompt. README stellt Onboarding vor den manuellen Fallback.
+          approved_content_hash: f16b988496b93671f3e38cfa239856474672aef92b5233d2ca42e2b295360468
+          approved_parent_hash: d2b742700000264a655f1543416f1909ea5de4b1af55e2ee3c3772f5d9114a72
+          children:
+            - id: DD-26
+              kind: detail_design
+              title: Zustandserkennung und Prompt-Auswahl im init-Command
+              body: Der init-Handler ruft findTrellisProject(ctx.cwd, dependencies.readTextFile) auf. Erfolg bedeutet vorhandene Verdrahtung und führt zu genau einer User-Nachricht mit INTERVIEW_PROMPT. Ein Fundfehler bedeutet unverdrahtetes Projekt und führt zu genau einer User-Nachricht mit dem Onboarding- und anschließend dem unveränderten Interview-Prompt. Andere Commands und die Aktivierungslogik bleiben unverändert.
+              approved_content_hash: f7aa946bf0624801ee13a36b04768f4a31f552219e02cfe18ed079f20aee5fff
+              approved_parent_hash: f16b988496b93671f3e38cfa239856474672aef92b5233d2ca42e2b295360468
+              children:
+                - id: UT-26
+                  kind: unit_test
+                  title: UT-26 Zustandsabhängige init-Prompt-Auswahl
+                  body: Unit-Tests prüfen Registrierung, gültige trellis-project-Zeile, fehlende oder ungültige Verdrahtung und jeweils exakt eine User-Nachricht mit der korrekten Prompt-Auswahl. Jeder Testname enthält UT-26.
+                  approved_content_hash: d306a7975e5919bc87bcbc9d07852030d97e98017152a784132e9e96570d0a6f
+                  approved_parent_hash: f7aa946bf0624801ee13a36b04768f4a31f552219e02cfe18ed079f20aee5fff
+                  evidence:
+                    tests:
+                        - test/init-command.test.ts::UT-10 UT-26 Zustandsabhängiger init-Command > UT-10 UT-26 registriert trellis:init und startet ohne Verdrahtung das Onboarding
+                        - test/init-command.test.ts::UT-10 UT-26 Zustandsabhängiger init-Command > UT-10 UT-26 sendet mit gültiger Verdrahtung ohne Aktivierungsumweg den Interview-Prompt
+                        - test/init-command.test.ts::UT-10 UT-26 Zustandsabhängiger init-Command > UT-26 behandelt eine ungültige trellis-project-Konfiguration als Onboarding-Fall
+                    recorded_at: "2026-08-31T12:36:41Z"
+            - id: DD-27
+              kind: detail_design
+              title: Sicherer Onboarding-Prompt mit Gate-Rezepten
+              body: src/onboarding-prompt.ts exportiert ONBOARDING_PROMPT. Der Prompt ordnet Repository-Inspektion und Rückfragen vor Mutationen an, verbietet Overwrite vorhandener Dateien, verlangt git init -b develop nur ohne Repository und einen vollständigen Commit aller Änderungen zwingend vor trellis init --name --repo. Er erklärt den danach greifenden Branch-Gate-Hook. trellis config wird ausdrücklich als Shell-CLI-Schritt und nicht über MCP ausgeführt. Die exakten Gate-Rezepte erzeugen für TypeScript/vitest JUnit und LCOV, für Go gotestsum-JUnit und coverprofile sowie für Python/pytest JUnit und LCOV; andere Stacks müssen dieselben parsebaren Artefaktklassen liefern. trellis doctor ist verpflichtende Abnahme, danach folgt der angehängte Interview-Prompt.
+              approved_content_hash: 7f50329d0d79f62ce1b1fa7e39701a7b634c44948b6c45117f773920d110b391
+              approved_parent_hash: f16b988496b93671f3e38cfa239856474672aef92b5233d2ca42e2b295360468
+              children:
+                - id: UT-27
+                  kind: unit_test
+                  title: UT-27 Reihenfolge, Schutz und stackgerechte Gate-Rezepte
+                  body: Unit-Tests prüfen die Reihenfolge Inspektion, Rückfragen, Skeleton, Vorab-Commit, trellis init, trellis config, trellis doctor und Interview; außerdem Overwrite-Verbot, develop-Initialisierung, CLI-statt-MCP-Grenze und die exakten TypeScript-, Go- und Python-Kommandos mit JUnit und LCOV beziehungsweise coverprofile. Jeder Testname enthält UT-27.
+                  approved_content_hash: 245f92a666d57c7c6f195bb0ca9c6043fff488d87325eaa97552f4dd5e3bfb97
+                  approved_parent_hash: 7f50329d0d79f62ce1b1fa7e39701a7b634c44948b6c45117f773920d110b391
+                  evidence:
+                    tests:
+                        - test/onboarding-prompt.test.ts::UT-27 Sicherer Onboarding-Prompt und Gate-Rezepte > UT-27 erzwingt Inspektion, sichere Skeleton-Erstellung und Vorab-Commit in Reihenfolge
+                        - test/onboarding-prompt.test.ts::UT-27 Sicherer Onboarding-Prompt und Gate-Rezepte > UT-27 enthält die exakten TypeScript-, Go- und Python-Gate-Rezepte
+                        - test/onboarding-prompt.test.ts::UT-27 Sicherer Onboarding-Prompt und Gate-Rezepte > UT-27 hält Gate-Konfiguration in der Shell-CLI und geht nahtlos ins Interview über
+                    recorded_at: "2026-08-31T12:36:41Z"
+            - id: DD-28
+              kind: detail_design
+              title: README mit Onboarding und manuellem Fallback
+              body: Der Setup-Abschnitt empfiehlt /trellis:init für neue Projekte und erklärt knapp die automatisierte Abfolge. Der bestehende manuelle Ablauf mit Skeleton-Commit, trellis init, trellis config und trellis doctor bleibt als ausdrücklich benannter Fallback vollständig erhalten.
+              approved_content_hash: 5d4694dd16c811a33f9fe1c7a693d732c11e5243fe28874fc44f785d40897434
+              approved_parent_hash: f16b988496b93671f3e38cfa239856474672aef92b5233d2ca42e2b295360468
+              children:
+                - id: UT-28
+                  kind: unit_test
+                  title: UT-28 README-Onboarding und manueller Fallback
+                  body: Ein Dokumenttest prüft den empfohlenen /trellis:init-Onboarding-Weg und den weiterhin dokumentierten manuellen Fallback mit allen vier Schritten. Jeder Testname enthält UT-28.
+                  approved_content_hash: 0c05c49d92d42784d5622c204c0ced2739aefeb3291bf783b4fcb3d67b138218
+                  approved_parent_hash: 5d4694dd16c811a33f9fe1c7a693d732c11e5243fe28874fc44f785d40897434
+                  evidence:
+                    tests:
+                        - test/readme.test.ts::UT-8 UT-25 README-Pflichtinhalte > UT-28 dokumentiert /trellis:init-Onboarding und den manuellen Fallback
+                    recorded_at: "2026-08-31T12:36:41Z"
+            - id: IT-12
+              kind: integration_test
+              title: IT-12 init-Command in verdrahteten und neuen Projekten
+              body: Eine Integration-Suite registriert die Extension am pi-Harness und führt /trellis:init einmal in einem verdrahteten und einmal in einem unverdrahteten Projekt aus. Sie beobachtet jeweils genau eine User-Nachricht, im ersten Fall ausschließlich den Interview-Prompt und im zweiten Fall die geordnete Onboarding-/Interview-Komposition. Der Testname enthält IT-12.
+              approved_content_hash: 00ead1a57955871fc28c6a0dd7550251019bcee274e5738248286376dab2ee25
+              approved_parent_hash: f16b988496b93671f3e38cfa239856474672aef92b5233d2ca42e2b295360468
+              evidence:
+                tests:
+                    - test/integration-init.test.ts::IT-5 IT-12 Zustandserkennung des init-Commands im pi-Harness > IT-5 IT-12 wählt für verdrahtete und neue Projekte jeweils genau einen Prompt
+                recorded_at: "2026-08-31T12:36:41Z"
+        - id: AT-15
+          kind: acceptance_test
+          title: AT-15 Zustandsabhängiges Trellis-Onboarding
+          body: Eine Black-box-Suite prüft /trellis:init mit und ohne trellis-project-Zeile, die sichere Onboarding-Reihenfolge, alle drei Gate-Rezepte, CLI-Grenze, doctor-Abnahme, nahtlosen Interviewübergang sowie Onboarding und manuellen Fallback im README. Der Testname enthält AT-15.
+          covers:
+            - US-12.AC-1
+            - US-12.AC-2
+            - US-12.AC-3
+            - US-12.AC-4
+            - US-12.AC-5
+            - US-12.AC-6
+          approved_content_hash: 357207fad8fc74669a6cd25e321868c201e6a34ccfb11ebd1705c1d0c60c872d
+          approved_parent_hash: d2b742700000264a655f1543416f1909ea5de4b1af55e2ee3c3772f5d9114a72
+          evidence:
+            tests:
+                - test/acceptance-init.test.ts::AT-5 AT-15 Geführtes Onboarding und Projekt-Interview > AT-5 AT-15 wählt zustandsabhängig Onboarding oder unverändertes Interview
+                - test/acceptance-init.test.ts::AT-5 AT-15 Geführtes Onboarding und Projekt-Interview > AT-15 deckt sichere Reihenfolge, Gate-Rezepte, CLI-Grenze und Doctor-Abnahme ab
+                - test/acceptance-init.test.ts::AT-5 AT-15 Geführtes Onboarding und Projekt-Interview > AT-15 dokumentiert Onboarding und manuellen Fallback
+            recorded_at: "2026-08-31T12:36:41Z"
