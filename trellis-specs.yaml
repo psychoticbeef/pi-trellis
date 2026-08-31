@@ -28,6 +28,8 @@ glossary:
       definition: Über package.json oder Konventionsverzeichnisse ladbares pi-Ressourcenpaket.
     - term: Reliktsuche
       definition: Read-only Suche nach Code- und Spec-Relikten.
+    - term: Review-Runde
+      definition: Einmalige read-only Prüfung vor finish.
     - term: Statusline-Eintrag
       definition: Dezente aktuelle Anzeige der laufenden Story und ihrer Gates.
     - term: Subagent-Rezept
@@ -39,12 +41,12 @@ glossary:
     - term: Änderungsreview
       definition: Read-only Architekturprüfung großer Änderungen.
 counters:
-    AS: 8
-    AT: 11
-    DD: 18
-    IT: 8
-    US: 8
-    UT: 18
+    AS: 9
+    AT: 12
+    DD: 20
+    IT: 9
+    US: 9
+    UT: 20
     ac:US-1: 4
     ac:US-2: 4
     ac:US-3: 4
@@ -53,6 +55,7 @@ counters:
     ac:US-6: 4
     ac:US-7: 5
     ac:US-8: 4
+    ac:US-9: 6
 stories:
     - id: US-1
       kind: story
@@ -920,3 +923,106 @@ stories:
             tests:
                 - test/acceptance-context-hygiene.test.ts::US-8 Context-Hygiene > AT-9 lässt den Kontext ohne aktiven Trellis-Modus unverändert
             recorded_at: "2026-08-30T20:08:38Z"
+    - id: US-9
+      kind: story
+      title: Auto-Aktivierung und Review-Gate vor finish
+      body: Die TypeScript-pi-Extension aktiviert den Trellis-Modus bei session_start automatisch für Projekte mit trellis-project in AGENTS.md und verzögert den ersten finish-Versuch jeder Story pro Sitzung durch eine Review-Runde.
+      status: done
+      acceptance_criteria:
+        - id: US-9.AC-1
+          given: Die projektlokale AGENTS.md enthält eine gültige trellis-project-Zeile.
+          when: session_start ausgelöst wird.
+          then: Die Extension aktiviert den Trellis-Modus automatisch mit demselben Zustand, derselben MCP-Validierung, demselben Statusline-Eintrag und derselben UI-Notiz einschließlich Board-Link wie /trellis:on.
+        - id: US-9.AC-2
+          given: Der Trellis-Modus wurde bei session_start automatisch aktiviert.
+          when: /trellis:off ausgeführt wird oder AGENTS.md keine gültige trellis-project-Zeile enthält.
+          then: /trellis:off deaktiviert den Trellis-Modus und verhindert bis zum Sitzungsende jede erneute Aktivierung; ohne gültige Zeile bleibt das bisherige Startverhalten unverändert.
+        - id: US-9.AC-3
+          given: Für eine Story wurde in der aktuellen Sitzung noch keine Review-Runde angestoßen.
+          when: Ein Trellis-transition-Tool-Call mit action=finish für diese Story erfolgt.
+          then: Die Extension blockiert ausschließlich diesen ersten finish-Call mit einer begründeten Anweisung und markiert die Review-Runde für Story und Sitzung sofort als angestoßen.
+        - id: US-9.AC-4
+          given: Der erste finish-Call einer Story wurde blockiert.
+          when: Der Agent die Blockbegründung erhält.
+          then: Die Anweisung verlangt pre-finish-review und relic-hunter bei verfügbarem Agent-Tool parallel auszuführen, andernfalls beide Prüfungen selbst inline durchzuführen, die Befunde zu wiegen und anschließend finish erneut aufzurufen.
+        - id: US-9.AC-5
+          given: Die Review-Runde einer Story gilt in der aktuellen Sitzung als angestoßen.
+          when: Ein weiterer einschließlich identischer Trellis-transition-Tool-Call mit action=finish für dieselbe Story erfolgt.
+          then: Die Extension lässt ihn ohne Laufzeit-Tracking oder Bewertung der Reviews ungehindert passieren und stößt keine zweite Review-Runde an.
+        - id: US-9.AC-6
+          given: Die Extension verarbeitet Tool-Calls und Sitzungswechsel.
+          when: Andere transition-Actions, finish für eine andere Story oder session_start auftreten.
+          then: Andere transition-Actions bleiben unverändert, jede Story erhält höchstens einen ersten Block pro Sitzung und session_start setzt den Status der Review-Runden für die neue Sitzung zurück.
+      approved_content_hash: 860f86d83a72cd05a4cc4db4b9c087902a7a7da715870dee72dee0927780ba8f
+      children:
+        - id: AS-9
+          kind: arch
+          title: Sitzungsgebundene Aktivierung und Review-Gate im Extension-Adapter
+          body: Die bestehende TypeScript-pi-Extension bündelt die Aktivierungssequenz aus Projekterkennung, get_overview, Subagent-Rezept-Provisionierung, Statusline-Eintrag und Board-Link-UI-Notiz in einer wiederverwendbaren Funktion. session_start setzt sämtlichen sitzungsgebundenen Zustand zurück und ruft diese Sequenz bei gültiger trellis-project-Zeile auf; ein bis zum Sitzungsende gesetztes Off-Merkmal schützt gegen erneute Aktivierung und laufende Aktivierungs-Races. Ein synchroner tool_call-Guard erkennt ausschließlich Trellis-transition-Aufrufe mit action=finish und Story-ID in den unterstützten MCP-Eingabeformen. Ein Set angestoßener Story-IDs wird vor dem ersten Block aktualisiert, sodass jeder folgende finish derselben Story ohne Review-Laufzeit-Tracking passiert. Die Blockbegründung enthält die vollständige Anweisung für parallele pre-finish-review- und relic-hunter-Ausführung per Agent-Tool samt Inline-Fallback, Befundabwägung und erneutem finish. Betroffene Pfade sind src/index.ts, src/review-gate.ts, test/harness.ts, test/review-gate.test.ts und test/acceptance-auto-review.test.ts.
+          approved_content_hash: bee134474d295fa1af61e3eef51919a43f1868e7a19fff1aa0c7c9f78ebe0e59
+          approved_parent_hash: 860f86d83a72cd05a4cc4db4b9c087902a7a7da715870dee72dee0927780ba8f
+          children:
+            - id: DD-19
+              kind: detail_design
+              title: Gemeinsame Aktivierungssequenz und sitzungsgebundene Deaktivierung
+              body: src/index.ts extrahiert die bisherige /trellis:on-Logik in eine asynchrone Aktivierungsfunktion mit bestehendem Generationenschutz. session_start leert die angestoßenen Story-IDs, entfernt alten aktiven Zustand, setzt das Off-Merkmal zurück und prüft mit findTrellisProject die AGENTS.md ab ctx.cwd. Bei Fund führt es dieselbe Aktivierungsfunktion aus; bei fehlender gültiger trellis-project-Zeile bleibt es still. /trellis:off setzt das Off-Merkmal bis zum nächsten session_start, erhöht die Generationen und räumt Trellis-Modus und Statusline-Eintrag. /trellis:on respektiert das gesetzte Off-Merkmal.
+              approved_content_hash: a32f80d293563e6345637a4ee0b4346e4bacea9d478fd02639375e6886b3c5d4
+              approved_parent_hash: bee134474d295fa1af61e3eef51919a43f1868e7a19fff1aa0c7c9f78ebe0e59
+              children:
+                - id: UT-19
+                  kind: unit_test
+                  title: Auto-Aktivierung, Off-Race und Sitzungsreset
+                  body: Unit-Tests erweitern den Pi-Harness um session_start und prüfen erfolgreiche Auto-Aktivierung mit Statusline-Eintrag und Board-Link, stilles Verhalten ohne Projekt, /trellis:off während einer Aktivierung, gesperrtes erneutes /trellis:on sowie den Reset in der nächsten Sitzung. Der Testname enthält die ID dieses unit_test.
+                  approved_content_hash: 3ee36e4f02415811f3d7c79a1f00d225d0d4d0059fa7acf9854532754adda34f
+                  approved_parent_hash: a32f80d293563e6345637a4ee0b4346e4bacea9d478fd02639375e6886b3c5d4
+                  evidence:
+                    tests:
+                        - test/acceptance-auto-review.test.ts::UT-19 Auto-Aktivierung, Off-Race und Sitzungsreset > UT-19 bleibt ohne gültige trellis-project-Zeile still
+                        - test/acceptance-auto-review.test.ts::UT-19 Auto-Aktivierung, Off-Race und Sitzungsreset > UT-19 lässt /trellis:off eine laufende Auto-Aktivierung entwerten
+                    recorded_at: "2026-08-31T00:11:01Z"
+            - id: DD-20
+              kind: detail_design
+              title: Deterministischer transition-finish-Guard und Review-Anweisung
+              body: src/review-gate.ts exportiert eine reine Extraktion der Story-ID ausschließlich für Trellis-transition-Tool-Calls mit action=finish. Sie akzeptiert direkte trellis_transition-Namen sowie den MCP-Gateway-Aufruf mit tool transition oder trellis_transition und Args als Objekt oder JSON-String; unvollständige, fremde und andere transition-Actions liefern undefined. Eine konstante Blockbegründung weist den Agenten an, pre-finish-review und relic-hunter bei verfügbarem Agent-Tool parallel, sonst beide Prüfungen selbst inline read-only auszuführen, Befunde zu wiegen und finish erneut aufzurufen. src/index.ts fügt die erkannte Story-ID vor Rückgabe des ersten Blocks in das sitzungsgebundene Set ein und lässt alle späteren finish-Aufrufe derselben Story unverändert.
+              approved_content_hash: 804ba2e90a11ba6a201a912d3295d9640fcd9b890eb7cfb972b521c62961f141
+              approved_parent_hash: bee134474d295fa1af61e3eef51919a43f1868e7a19fff1aa0c7c9f78ebe0e59
+              children:
+                - id: UT-20
+                  kind: unit_test
+                  title: finish-Erkennung, Blockverbrauch und Review-Anweisung
+                  body: Unit-Tests prüfen sämtliche unterstützten direkten und MCP-Gateway-Eingabeformen, fremde Tools, andere Actions, fehlende Story-IDs, die vollständige Agent-Tool-/Inline-Anweisung und die Set-Semantik vom ersten Block bis zum identischen Re-Call und zur zweiten Story. Der Testname enthält die ID dieses unit_test.
+                  approved_content_hash: 31275ba148a78126ebac0b43bda70ae6c3cbddbfe5ed7ac7e6d6b705998e9ce4
+                  approved_parent_hash: 804ba2e90a11ba6a201a912d3295d9640fcd9b890eb7cfb972b521c62961f141
+                  evidence:
+                    tests:
+                        - test/review-gate.test.ts::UT-20 finish-Erkennung, Blockverbrauch und Review-Anweisung > UT-20 erkennt direkte und MCP-Gateway finish-Aufrufe strikt
+                        - test/review-gate.test.ts::UT-20 finish-Erkennung, Blockverbrauch und Review-Anweisung > UT-20 weist Agent-Tool, Parallelität, Inline-Fallback, Abwägung und Re-Call an
+                        - test/review-gate.test.ts::UT-20 finish-Erkennung, Blockverbrauch und Review-Anweisung > UT-20 verbraucht den ersten Block sofort pro Story und setzt ihn bei session_start zurück
+                    recorded_at: "2026-08-31T00:11:01Z"
+            - id: IT-9
+              kind: integration_test
+              title: Session-, Command- und Tool-Call-Hooks im Pi-Harness
+              body: Ein Integrations-Test registriert die Extension im Pi-Harness, löst session_start, /trellis:off und verschiedene tool_call-Ereignisse aus und prüft die gekoppelte Aktivierungssequenz, UI-Ausgaben, den sitzungsgebundenen Reset sowie die blockierende und anschließend durchlässige finish-Behandlung. Der Testname enthält die ID dieses integration_test.
+              approved_content_hash: 35d9b36d1f4d3f29dcdac76d90add713421ca9557ae883169309db36b0d24f97
+              approved_parent_hash: bee134474d295fa1af61e3eef51919a43f1868e7a19fff1aa0c7c9f78ebe0e59
+              evidence:
+                tests:
+                    - test/acceptance-auto-review.test.ts::AT-12 IT-9 Automatischer Sitzungsstart und einmaliges finish-Gate > AT-12 IT-9 erfüllt Auto-Aktivierung, sticky Off, Review-Anweisung, Re-Call und Story-Isolation
+                recorded_at: "2026-08-31T00:11:01Z"
+        - id: AT-12
+          kind: acceptance_test
+          title: Automatischer Sitzungsstart und einmaliges finish-Gate
+          body: Eine Black-box-Suite lädt die TypeScript-pi-Extension mit Fake-Trellis-MCP, UI-Spies und Tool-Call-Harness. Sie prüft Auto-Aktivierung samt Board-Link und Statusline, die bis zum Sitzungsende wirksame Deaktivierung, den ersten blockierten finish-Call mit vollständiger Review-Anweisung, den ungehinderten identischen Re-Call, Story-Isolation, den Reset bei session_start und unveränderte andere transition-Actions. Der Testname enthält die ID dieses acceptance_test.
+          covers:
+            - US-9.AC-1
+            - US-9.AC-2
+            - US-9.AC-3
+            - US-9.AC-4
+            - US-9.AC-5
+            - US-9.AC-6
+          approved_content_hash: 2ef88378daf7674f6c1cf70386b7abaa9dee23add0f4b370917acc2ee0855086
+          approved_parent_hash: 860f86d83a72cd05a4cc4db4b9c087902a7a7da715870dee72dee0927780ba8f
+          evidence:
+            tests:
+                - test/acceptance-auto-review.test.ts::AT-12 IT-9 Automatischer Sitzungsstart und einmaliges finish-Gate > AT-12 IT-9 erfüllt Auto-Aktivierung, sticky Off, Review-Anweisung, Re-Call und Story-Isolation
+            recorded_at: "2026-08-31T00:11:01Z"

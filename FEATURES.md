@@ -12,6 +12,7 @@
 - **US-6** — Subagent-Rezepte und Auto-Load
 - **US-7** — Qualitätswerkzeuge für Änderungsreview und Reliktsuche
 - **US-8** — Context-Hygiene im Trellis-Modus
+- **US-9** — Auto-Aktivierung und Review-Gate vor finish
 
 ## Glossary
 
@@ -25,6 +26,7 @@
 - **Kanban-Zusammenfassung** — UI-only Übersicht über Story-Zähler, aktive Arbeit und Risiken.
 - **pi-Package** — Über package.json oder Konventionsverzeichnisse ladbares pi-Ressourcenpaket.
 - **Reliktsuche** — Read-only Suche nach Code- und Spec-Relikten.
+- **Review-Runde** — Einmalige read-only Prüfung vor finish.
 - **Statusline-Eintrag** — Dezente aktuelle Anzeige der laufenden Story und ihrer Gates.
 - **Subagent-Rezept** — Projektlokale Markdown-Definition eines spezialisierten Agenten.
 - **Trellis-Kontextblock** — Pro User-Turn injizierte Trellis-Projektübersicht unter 1500 Zeichen.
