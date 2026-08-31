@@ -13,6 +13,7 @@
 - **US-7** — Qualitätswerkzeuge für Änderungsreview und Reliktsuche
 - **US-8** — Context-Hygiene im Trellis-Modus
 - **US-9** — Auto-Aktivierung und Review-Gate vor finish
+- **US-10** — Review-Gate v2 mit verifizierten Reviews
 
 ## Glossary
 
@@ -22,11 +23,13 @@
 - **Context-Hygiene** — Verlustfreie Bereinigung überholter LLM-Kontextinhalte.
 - **Dateihinweis** — Einmal pro Done-Story und Sitzung eingereihter LLM-Kontexthinweis nach einer zugehörigen Dateiänderung.
 - **Drei-Prüfer-Check** — Parallele Prüfung durch drei Qualitätsagenten.
+- **Fail-open** — Warnendes Durchlassen von finish nach drei Blockierungen.
 - **Interview-Prompt** — Strukturierte LLM-Anleitung für das geführte Projekt-Interview.
 - **Kanban-Zusammenfassung** — UI-only Übersicht über Story-Zähler, aktive Arbeit und Risiken.
 - **pi-Package** — Über package.json oder Konventionsverzeichnisse ladbares pi-Ressourcenpaket.
 - **Reliktsuche** — Read-only Suche nach Code- und Spec-Relikten.
-- **Review-Runde** — Einmalige read-only Prüfung vor finish.
+- **Review-Gate** — Finish-Sperre bis zur Review-Freigabe oder zum Fail-open.
+- **Review-Runde** — Storybezogene Prüfung durch fünf erfolgreiche read-only Agent-Ergebnisse vor finish.
 - **Statusline-Eintrag** — Dezente aktuelle Anzeige der laufenden Story und ihrer Gates.
 - **Subagent-Rezept** — Projektlokale Markdown-Definition eines spezialisierten Agenten.
 - **Trellis-Kontextblock** — Pro User-Turn injizierte Trellis-Projektübersicht unter 1500 Zeichen.
