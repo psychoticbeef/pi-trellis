@@ -27,4 +27,17 @@ describe("UT-8 UT-25 README-Pflichtinhalte", () => {
     expect(readme).toMatch(/Projektlokale `.pi\/agents\/\*\.md`.*Nutzer-Overrides.*Vorrang/);
     expect(readme).not.toContain(".pi/agents/*.md` committen");
   });
+
+  it("UT-28 dokumentiert /trellis:init-Onboarding und den manuellen Fallback", async () => {
+    const readme = await readFile(join(root, "README.md"), "utf8");
+    expect(readme).toMatch(/Empfohlen: Onboarding-Modus mit `\/trellis:init`/);
+    expect(readme).toMatch(/Manueller Fallback/);
+    for (const required of [
+      "git init -b develop",
+      "git add -A && git commit",
+      "trellis init --name",
+      "trellis config <project-id>",
+      "trellis doctor <project-id>",
+    ]) expect(readme).toContain(required);
+  });
 });
