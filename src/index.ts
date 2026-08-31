@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { ensureAgentRecipes } from "./agent-recipes.js";
 import { CHECK_PROMPT } from "./check-prompt.js";
 import { buildBoardUrl, findTrellisProject, type ReadTextFile, type TrellisProject } from "./config.js";
@@ -14,6 +14,7 @@ import {
 import { INTERVIEW_PROMPT } from "./init-prompt.js";
 import { TrellisMcpClient, type SpecsForPathResult } from "./mcp-client.js";
 import { buildReviewPrompt } from "./review-prompt.js";
+import { finishStoryIdFromToolCall, reviewGateReason } from "./review-gate.js";
 import { formatKanbanStatus, formatStatusLine } from "./status.js";
 
 export interface ExtensionDependencies {
@@ -51,6 +52,7 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
     let active: ActiveState | undefined;
     let activationGeneration = 0;
     let statusUpdateGeneration = 0;
+    let disabledForSession = false;
     const pendingFileChanges = new Map<string, {
       state: ActiveState;
       absolutePath: string;
@@ -58,46 +60,78 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
       before: string | undefined;
     }>();
     const hintedStoryIds = new Set<string>();
+    const reviewedStoryIds = new Set<string>();
 
     const emit = (content: string): void => {
       pi.sendMessage({ customType: "trellis", content, display: true });
     };
 
+    const activate = async (
+      ctx: ExtensionContext,
+      discoveredProject?: TrellisProject,
+    ): Promise<void> => {
+      if (disabledForSession) {
+        emit("Trellis-Modus bleibt bis zum Sitzungsende deaktiviert.");
+        return;
+      }
+
+      const generation = ++activationGeneration;
+      statusUpdateGeneration += 1;
+      active = undefined;
+      ctx.ui.setStatus("trellis", undefined);
+      try {
+        const project = discoveredProject ??
+          await findTrellisProject(ctx.cwd, dependencies.readTextFile);
+        const boardAddress = environment.TRELLIS_BOARD_ADDRESS;
+        const boardUrl = buildBoardUrl(project.id, boardAddress);
+        const overview = addWorktreePaths(await getOverview(project.id), project.root);
+        let recipeError: unknown;
+        try {
+          await provisionAgentRecipes(ctx.cwd);
+        } catch (error) {
+          recipeError = error;
+        }
+        if (activationGeneration !== generation || disabledForSession) return;
+        active = { project, boardAddress, lastOverview: overview };
+        ctx.ui.setStatus("trellis", ctx.ui.theme.fg("dim", formatStatusLine(overview)));
+        if (recipeError) {
+          emit(`Subagent-Rezepte nicht vollständig bereitgestellt: ${messageOf(recipeError)}`);
+        }
+        emit(`Trellis-Modus aktiviert: ${boardUrl}`);
+      } catch (error) {
+        if (activationGeneration !== generation || disabledForSession) return;
+        emit(`Trellis-Modus nicht aktiviert: ${messageOf(error)}`);
+      }
+    };
+
+    pi.on("session_start", async (_event, ctx) => {
+      const generation = ++activationGeneration;
+      statusUpdateGeneration += 1;
+      active = undefined;
+      disabledForSession = false;
+      reviewedStoryIds.clear();
+      hintedStoryIds.clear();
+      pendingFileChanges.clear();
+      ctx.ui.setStatus("trellis", undefined);
+
+      try {
+        const project = await findTrellisProject(ctx.cwd, dependencies.readTextFile);
+        if (activationGeneration !== generation || disabledForSession) return;
+        await activate(ctx, project);
+      } catch {
+        // A project without a valid trellis-project line keeps the normal startup behavior.
+      }
+    });
+
     pi.registerCommand("trellis:on", {
       description: "Trellis-Modus aktivieren",
-      handler: async (_args, ctx) => {
-        const generation = ++activationGeneration;
-        statusUpdateGeneration += 1;
-        active = undefined;
-        ctx.ui.setStatus("trellis", undefined);
-        try {
-          const project = await findTrellisProject(ctx.cwd, dependencies.readTextFile);
-          const boardAddress = environment.TRELLIS_BOARD_ADDRESS;
-          const boardUrl = buildBoardUrl(project.id, boardAddress);
-          const overview = addWorktreePaths(await getOverview(project.id), project.root);
-          let recipeError: unknown;
-          try {
-            await provisionAgentRecipes(ctx.cwd);
-          } catch (error) {
-            recipeError = error;
-          }
-          if (activationGeneration !== generation) return;
-          active = { project, boardAddress, lastOverview: overview };
-          ctx.ui.setStatus("trellis", ctx.ui.theme.fg("dim", formatStatusLine(overview)));
-          if (recipeError) {
-            emit(`Subagent-Rezepte nicht vollständig bereitgestellt: ${messageOf(recipeError)}`);
-          }
-          emit(`Trellis-Modus aktiviert: ${boardUrl}`);
-        } catch (error) {
-          if (activationGeneration !== generation) return;
-          emit(`Trellis-Modus nicht aktiviert: ${messageOf(error)}`);
-        }
-      },
+      handler: async (_args, ctx) => activate(ctx),
     });
 
     pi.registerCommand("trellis:off", {
       description: "Trellis-Modus deaktivieren",
       handler: async (_args, ctx) => {
+        disabledForSession = true;
         activationGeneration += 1;
         statusUpdateGeneration += 1;
         active = undefined;
@@ -153,6 +187,15 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
     });
 
     pi.on("tool_call", async (event, ctx) => {
+      const finishStoryId = finishStoryIdFromToolCall(
+        event.toolName,
+        event.input as Record<string, unknown>,
+      );
+      if (finishStoryId && !reviewedStoryIds.has(finishStoryId)) {
+        reviewedStoryIds.add(finishStoryId);
+        return { block: true, reason: reviewGateReason(finishStoryId) };
+      }
+
       if (event.toolName !== "edit" && event.toolName !== "write") return;
       const state = active;
       if (!state) return;
