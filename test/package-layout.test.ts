@@ -30,4 +30,13 @@ describe("UT-7 Package-Layout und Manifestregeln", () => {
       expect(packageJson.bundledDependencies ?? []).not.toContain(name);
     }
   });
+
+  it("UT-24 paketiert plain-ESM-postinstall und kanonische Rezeptdateien", async () => {
+    const packageJson = await manifest();
+    expect(packageJson.scripts?.postinstall).toBe("node scripts/install-agents.mjs");
+    expect(packageJson.files).toContain("scripts/install-agents.mjs");
+    expect(packageJson.files).toContain(".pi/agents");
+    await expect(readFile(join(root, "scripts", "install-agents.mjs"), "utf8"))
+      .resolves.toContain("PI_TRELLIS_SKIP_AGENT_INSTALL");
+  });
 });

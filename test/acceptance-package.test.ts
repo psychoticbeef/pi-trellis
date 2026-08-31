@@ -42,4 +42,21 @@ describe("AT-4 Installierbares und dokumentiertes pi-Package", () => {
       "Dateihinweis",
     ]) expect(readme).toContain(required);
   });
+
+  it("AT-14 packt postinstall und alle kanonischen Subagent-Rezepte", () => {
+    const packed = JSON.parse(execFileSync(
+      "npm",
+      ["pack", "--dry-run", "--json", "--ignore-scripts"],
+      { cwd: root, encoding: "utf8" },
+    )) as Array<{ files: Array<{ path: string }> }>;
+    const files = packed[0].files.map((file) => file.path);
+    expect(files).toContain("scripts/install-agents.mjs");
+    for (const name of [
+      "change-review.md",
+      "glossary-warden.md",
+      "pre-finish-review.md",
+      "relic-hunter.md",
+      "spec-sync-check.md",
+    ]) expect(files).toContain(`.pi/agents/${name}`);
+  });
 });
