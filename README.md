@@ -18,7 +18,50 @@ Alternativ den lokalen Pfad dauerhaft in `~/.pi/agent/settings.json` (oder proje
 }
 ```
 
+Global per git-Clone installieren:
+
+```bash
+pi install git:git@github.com:psychoticbeef/pi-trellis
+```
+
 Das Projekt benötigt eine `AGENTS.md` mit seiner `trellis-project`-ID und einen verfügbaren `trellis`-Befehl.
+
+## Setup in einem neuen Projekt
+
+Vom leeren Verzeichnis bis zur aktiven Extension (Beispiel: TypeScript-Projekt mit vitest):
+
+```bash
+mkdir ~/work/mein-projekt && cd ~/work/mein-projekt
+git init -b develop
+
+# 1. Projekt-Skelett anlegen (package.json, tsconfig, src/, test/) und
+#    VOR trellis init committen — danach blockt der Branch-Gate-Hook
+#    direkte Commits auf develop:
+git add -A && git commit -m "chore: project skeleton"
+
+# 2. trellis verdrahten (scaffoldet .mcp.json, AGENTS.md mit
+#    trellis-project-Zeile, git hooks, .gitignore-Eintrag und committet das selbst):
+trellis init --name mein-projekt --repo ~/work/mein-projekt
+
+# 3. Gates konfigurieren (nur via CLI, bewusst nicht via MCP):
+trellis config <project-id> \
+  --desc 'Einzeiler fürs Board' \
+  --lint 'npx tsc --noEmit' \
+  --test 'npx vitest run --reporter=junit --outputFile=reports/tests.xml --coverage.enabled --coverage.reporter=lcov --coverage.reportsDirectory=reports/coverage' \
+  --junit 'reports/*.xml' \
+  --coverage 'reports/coverage/lcov.info'
+
+# 4. Verdrahtung prüfen:
+trellis doctor <project-id>
+```
+
+Danach `pi` im Projekt starten und den Trust-Dialog mit **Trust** beantworten (Escape überspringt das Laden der Extensions). Die Extension aktiviert sich über die `trellis-project`-Zeile in `AGENTS.md` automatisch, legt fehlende Subagent-Rezepte unter `.pi/agents` an und zeigt den Board-Link (`http://127.0.0.1:7420/p/<project-id>/`).
+
+Hinweise:
+
+- Der `release`-Branch (`main`) entsteht beim ersten `trellis release`.
+- Die von der Aktivierung angelegten `.pi/agents/*.md` committen, sonst blockt der erste `finish` wegen unsauberem Worktree.
+- Wer das pi-trellis-Repo selbst bearbeitet: dort lädt `.pi/settings.json` die lokale Entwicklungsversion — die globale Installation nicht zusätzlich aktivieren, sonst läuft die Extension doppelt.
 
 ## Commands
 
