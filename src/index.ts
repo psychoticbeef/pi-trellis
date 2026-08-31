@@ -12,6 +12,7 @@ import {
   selectUnhintedDoneStories,
 } from "./file-hints.js";
 import { INTERVIEW_PROMPT } from "./init-prompt.js";
+import { ONBOARDING_INTERVIEW_PROMPT } from "./onboarding-prompt.js";
 import { TrellisMcpClient, type SpecsForPathResult } from "./mcp-client.js";
 import { buildReviewPrompt } from "./review-prompt.js";
 import {
@@ -161,13 +162,14 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
     });
 
     pi.registerCommand("trellis:init", {
-      description: "Geführtes Trellis-Projekt-Interview starten",
-      handler: async () => {
-        if (!active) {
-          emit("/trellis:init erfordert einen aktiven Trellis-Modus. Führe zuerst /trellis:on aus.");
-          return;
+      description: "Trellis-Onboarding oder geführtes Projekt-Interview starten",
+      handler: async (_args, ctx) => {
+        try {
+          await findTrellisProject(ctx.cwd, dependencies.readTextFile);
+          pi.sendUserMessage(INTERVIEW_PROMPT);
+        } catch {
+          pi.sendUserMessage(ONBOARDING_INTERVIEW_PROMPT);
         }
-        pi.sendUserMessage(INTERVIEW_PROMPT);
       },
     });
 
