@@ -28,7 +28,13 @@ Das Projekt benötigt eine `AGENTS.md` mit seiner `trellis-project`-ID und einen
 
 ## Setup in einem neuen Projekt
 
-Vom leeren Verzeichnis bis zur aktiven Extension (Beispiel: TypeScript-Projekt mit vitest):
+### Empfohlen: Onboarding-Modus mit `/trellis:init`
+
+Nach der globalen Installation `pi` im neuen Projektverzeichnis starten und `/trellis:init` ausführen. Ohne vorhandene `trellis-project`-Zeile startet der Command den **Onboarding-Modus**: Der Agent inspiziert das Repository, erfragt Zweck, Sprache und Stack, legt ausschließlich fehlende Skeleton-Dateien an und initialisiert bei Bedarf Git auf `develop`. Er erstellt den vollständigen **Vorab-Commit** **vor** `trellis init`, konfiguriert ausschließlich über `trellis config` ein stackgerechtes **Gate-Rezept** für Lint, Tests und Coverage, nimmt die Verdrahtung mit `trellis doctor` ab und geht anschließend direkt zum bestehenden **Interview-Prompt** über. In bereits verdrahteten Projekten startet `/trellis:init` weiterhin sofort den Interview-Prompt.
+
+### Manueller Fallback
+
+Der bisherige manuelle Weg bleibt verfügbar. Vom leeren Verzeichnis bis zur aktiven Extension (Beispiel: TypeScript-Projekt mit vitest):
 
 ```bash
 mkdir ~/work/mein-projekt && cd ~/work/mein-projekt
@@ -70,7 +76,7 @@ Hinweise:
 - `/trellis:on` aktiviert den **Trellis-Modus**, prüft das Projekt und zeigt den Board-Link.
 - `/trellis:off` deaktiviert den Trellis-Modus und entfernt den Statusline-Eintrag.
 - `/trellis:status` zeigt die aktuelle Kanban-Zusammenfassung ausschließlich in der UI.
-- `/trellis:init` startet das geführte Projekt-Interview.
+- `/trellis:init` startet zustandsabhängig den **Onboarding-Prompt** oder den **Interview-Prompt**.
 - `/trellis:review [git-range]` startet `change-review` im Foreground; ohne Range wird der Worktree-Diff geprüft.
 - `/trellis:check` startet `spec-sync-check`, `glossary-warden` und `relic-hunter` parallel.
 
