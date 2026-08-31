@@ -5,7 +5,9 @@
   "type": "module",
   "main": "src/index.ts",
   "files": [
+    ".pi/agents",
     "extensions",
+    "scripts/install-agents.mjs",
     "src",
     "README.md"
   ],
@@ -14,6 +16,7 @@
   ],
   "scripts": {
     "lint": "tsc --noEmit",
+    "postinstall": "node scripts/install-agents.mjs",
     "test": "npx vitest run --reporter=junit --outputFile=reports/tests.xml"
   },
   "peerDependencies": {

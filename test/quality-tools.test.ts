@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
@@ -22,7 +22,7 @@ const requiredRelicCategories = [
 ];
 
 describe("UT-14 Change-Review- und Relic-Hunter-Rezepte", () => {
-  it("UT-14 begrenzt beide Rezepte auf read-only Werkzeuge und hält Projektkopien synchron", async () => {
+  it("UT-14 begrenzt beide kanonischen Rezeptdateien auf read-only Werkzeuge", async () => {
     for (const name of ["change-review.md", "relic-hunter.md"] as const) {
       const recipe = AGENT_RECIPES[name];
       expect(recipe).toMatch(/^---\ndescription: .+\ntools: read, grep, find, bash\n---\n/);
@@ -62,12 +62,13 @@ describe("UT-14 Change-Review- und Relic-Hunter-Rezepte", () => {
   });
 
   it("UT-14 erhält ein vorhandenes neues Rezept bytegenau", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "pi-trellis-ut14-"));
-    await ensureAgentRecipes(cwd);
-    const path = join(cwd, ".pi", "agents", "change-review.md");
+    const cwd = await mkdtemp(join(tmpdir(), "pi-trellis-ut14-project-"));
+    const agentDir = await mkdtemp(join(tmpdir(), "pi-trellis-ut14-agent-"));
+    const path = join(agentDir, "agents", "change-review.md");
     const custom = "custom review\n\u0000bytes\n";
+    await mkdir(join(agentDir, "agents"), { recursive: true });
     await writeFile(path, custom);
-    await ensureAgentRecipes(cwd);
+    await ensureAgentRecipes(cwd, { PI_CODING_AGENT_DIR: agentDir });
     expect(await readFile(path, "utf8")).toBe(custom);
   });
 });
@@ -149,14 +150,18 @@ describe("UT-16 Coverage-Abhängigkeit und LCOV-Lauf", () => {
 
 describe("IT-7 Aktivierung, Qualitätsrezepte und Commands", () => {
   it("IT-7 provisioniert fünf Rezepte und versendet Review- und Drei-Prüfer-Prompt", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "pi-trellis-it7-"));
+    const cwd = await mkdtemp(join(tmpdir(), "pi-trellis-it7-project-"));
+    const agentDir = await mkdtemp(join(tmpdir(), "pi-trellis-it7-agent-"));
     await writeFile(join(cwd, "AGENTS.md"), "trellis-project: project-7\n");
     const harness = createPiHarness();
-    createTrellisExtension({ getOverview: async () => ({}) })(harness.api);
+    createTrellisExtension({
+      getOverview: async () => ({}),
+      ensureAgentRecipes: (project) => ensureAgentRecipes(project, { PI_CODING_AGENT_DIR: agentDir }),
+    })(harness.api);
 
     await harness.commands.get("trellis:on")!("", harness.context(cwd));
     for (const [name, recipe] of Object.entries(AGENT_RECIPES)) {
-      expect(await readFile(join(cwd, ".pi", "agents", name), "utf8")).toBe(recipe);
+      expect(await readFile(join(agentDir, "agents", name), "utf8")).toBe(recipe);
     }
 
     const range = "develop...HEAD";
