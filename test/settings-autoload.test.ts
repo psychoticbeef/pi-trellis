@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -31,10 +32,18 @@ describe("AT-6 IT-6 Projektlokales Auto-Load im echten pi-Prozess", () => {
 });
 
 async function getProjectCommands(): Promise<string[]> {
+  // Leeres Agent-Verzeichnis: global installierte pi-Packages (z.B. eine
+  // installierte pi-trellis-Version) dürfen das projektlokale Auto-Load
+  // nicht überlagern.
+  const agentDir = await mkdtemp(join(tmpdir(), "pi-agent-"));
   const child = spawn(
     "pi",
     ["--mode", "rpc", "--approve", "--offline", "--no-session"],
-    { cwd: root, env: { ...process.env, PI_SKIP_VERSION_CHECK: "1" }, stdio: ["pipe", "pipe", "pipe"] },
+    {
+      cwd: root,
+      env: { ...process.env, PI_SKIP_VERSION_CHECK: "1", PI_CODING_AGENT_DIR: agentDir },
+      stdio: ["pipe", "pipe", "pipe"],
+    },
   );
   let stdout = "";
   let stderr = "";
