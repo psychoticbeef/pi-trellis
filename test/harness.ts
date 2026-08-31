@@ -1,6 +1,10 @@
 import type { ContextEvent, ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export type CommandHandler = (args: string, context: CommandContext) => Promise<void>;
+export type SessionStartHandler = (
+  event: { reason: string },
+  context: HookContext,
+) => Promise<void>;
 export type BeforeAgentStartHandler = (
   event: { systemPrompt: string },
   context: HookContext,
@@ -56,6 +60,7 @@ export function createPiHarness() {
   const userMessages: unknown[] = [];
   const notifications: Array<{ message: string; level: string }> = [];
   const statuses: Array<{ key: string; value: string | undefined }> = [];
+  let sessionStart: SessionStartHandler | undefined;
   let beforeAgentStart: BeforeAgentStartHandler | undefined;
   let contextEvent: ContextHandler | undefined;
   let turnEnd: TurnEndHandler | undefined;
@@ -68,8 +73,9 @@ export function createPiHarness() {
     },
     on(
       event: string,
-      handler: BeforeAgentStartHandler | ContextHandler | TurnEndHandler | ToolCallHandler | ToolResultHandler,
+      handler: SessionStartHandler | BeforeAgentStartHandler | ContextHandler | TurnEndHandler | ToolCallHandler | ToolResultHandler,
     ) {
+      if (event === "session_start") sessionStart = handler as SessionStartHandler;
       if (event === "before_agent_start") beforeAgentStart = handler as BeforeAgentStartHandler;
       if (event === "context") contextEvent = handler as ContextHandler;
       if (event === "turn_end") turnEnd = handler as TurnEndHandler;
@@ -104,6 +110,10 @@ export function createPiHarness() {
     notifications,
     statuses,
     context,
+    sessionStart: () => {
+      if (!sessionStart) throw new Error("session_start not registered");
+      return sessionStart;
+    },
     beforeAgentStart: () => {
       if (!beforeAgentStart) throw new Error("before_agent_start not registered");
       return beforeAgentStart;
