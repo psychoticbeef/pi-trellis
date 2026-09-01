@@ -20,7 +20,7 @@ const empty = overview();
 const active = (id = "US-14", path = "/repo") => overview({ id, status: "in_progress", worktree_path: path });
 const done = (id = "US-14") => overview({ id, status: "done" });
 
-describe("UT-31 UT-34 Overview-Attribution und Story-Statuswechsel", () => {
+describe("UT-31 UT-34 Trellis-Overview-basierte Token-Usage-Attribution und Story-Statuswechsel", () => {
   it("UT-31 UT-34 attribuiert Start-, Lauf- und Finish-Turn nur aus Overviews", () => {
     const tracker = new StoryUsageTracker();
 
@@ -47,7 +47,7 @@ describe("UT-31 UT-34 Overview-Attribution und Story-Statuswechsel", () => {
     expect(tracker.endTurn(assistant(19), done(), "/repo")).toBeUndefined();
   });
 
-  it("UT-31 UT-34 verwendet aktualisiertes Start-Overview statt Tool-Aufrufformen", () => {
+  it("UT-31 UT-34 verwendet aktualisiertes Start-Trellis-Overview statt Tool-Aufrufformen", () => {
     const tracker = new StoryUsageTracker();
     tracker.beginTurn(empty, "/repo");
     tracker.updateTurnStartOverview(active("US-14", "/repo"), "/repo");
@@ -65,7 +65,7 @@ describe("UT-31 UT-34 Overview-Attribution und Story-Statuswechsel", () => {
   });
 });
 
-describe("UT-35 Eindeutige Worktree-Auswahl", () => {
+describe("UT-35 Eindeutige Worktree-Pfad-Entsprechung", () => {
   const multiple = overview(
     { id: "US-14", status: "in_progress", worktree_path: "/work/US-14" },
     { id: "US-15", status: "in_progress", worktree_path: "/work/US-15" },
@@ -99,7 +99,7 @@ describe("UT-35 Eindeutige Worktree-Auswahl", () => {
     );
   });
 
-  it("UT-35 verwirft Turn nach mehrdeutigem Start-Overview trotz eindeutigem End-Overview", () => {
+  it("UT-35 verwirft Turn nach mehrdeutigem Start-Trellis-Overview trotz eindeutigem End-Trellis-Overview", () => {
     const warn = vi.fn();
     const tracker = new StoryUsageTracker(warn);
     tracker.beginTurn(multiple, "/work/other");
