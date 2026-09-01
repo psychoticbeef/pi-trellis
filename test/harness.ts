@@ -9,8 +9,16 @@ export type BeforeAgentStartHandler = (
   event: { systemPrompt: string },
   context: HookContext,
 ) => Promise<{ systemPrompt: string } | undefined>;
+export type TurnStartHandler = (
+  event: { turnIndex: number; timestamp: number },
+  context: HookContext,
+) => Promise<void>;
 export type TurnEndHandler = (
-  event: { turnIndex: number },
+  event: { turnIndex: number; message?: unknown; toolResults?: unknown[] },
+  context: HookContext,
+) => Promise<void>;
+export type SessionShutdownHandler = (
+  event: { reason: string },
   context: HookContext,
 ) => Promise<void>;
 export type AgentSettledHandler = (
@@ -76,13 +84,18 @@ export function createPiHarness() {
   let sessionStart: SessionStartHandler | undefined;
   let beforeAgentStart: BeforeAgentStartHandler | undefined;
   let contextEvent: ContextHandler | undefined;
+  let turnStart: TurnStartHandler | undefined;
   let turnEnd: TurnEndHandler | undefined;
+  let sessionShutdown: SessionShutdownHandler | undefined;
   let agentSettled: AgentSettledHandler | undefined;
   let toolCall: ToolCallHandler | undefined;
   let toolResult: ToolResultHandler | undefined;
   let contextUsage: { tokens: number | null; contextWindow: number; percent: number | null } | undefined;
   let modelContextWindow = 1_000;
   const compactCalls: CompactOptions[] = [];
+  const execCalls: Array<{ command: string; args: string[]; options?: unknown }> = [];
+  let execImplementation = async () => ({ stdout: "", stderr: "", code: 0, killed: false });
+  const busHandlers = new Map<string, Set<(data: unknown) => void>>();
 
   const api = {
     registerCommand(name: string, options: { handler: CommandHandler }) {
@@ -90,12 +103,14 @@ export function createPiHarness() {
     },
     on(
       event: string,
-      handler: SessionStartHandler | BeforeAgentStartHandler | ContextHandler | TurnEndHandler | AgentSettledHandler | ToolCallHandler | ToolResultHandler,
+      handler: SessionStartHandler | BeforeAgentStartHandler | ContextHandler | TurnStartHandler | TurnEndHandler | SessionShutdownHandler | AgentSettledHandler | ToolCallHandler | ToolResultHandler,
     ) {
       if (event === "session_start") sessionStart = handler as SessionStartHandler;
       if (event === "before_agent_start") beforeAgentStart = handler as BeforeAgentStartHandler;
       if (event === "context") contextEvent = handler as ContextHandler;
+      if (event === "turn_start") turnStart = handler as TurnStartHandler;
       if (event === "turn_end") turnEnd = handler as TurnEndHandler;
+      if (event === "session_shutdown") sessionShutdown = handler as SessionShutdownHandler;
       if (event === "agent_settled") agentSettled = handler as AgentSettledHandler;
       if (event === "tool_call") toolCall = handler as ToolCallHandler;
       if (event === "tool_result") toolResult = handler as ToolResultHandler;
@@ -108,6 +123,24 @@ export function createPiHarness() {
     },
     sendUserMessage(message: unknown) {
       userMessages.push(message);
+    },
+    exec(command: string, args: string[], options?: unknown) {
+      execCalls.push({ command, args: [...args], options });
+      return execImplementation();
+    },
+    events: {
+      emit(channel: string, data: unknown) {
+        for (const handler of busHandlers.get(channel) ?? []) handler(data);
+      },
+      on(channel: string, handler: (data: unknown) => void) {
+        let handlers = busHandlers.get(channel);
+        if (!handlers) {
+          handlers = new Set();
+          busHandlers.set(channel, handlers);
+        }
+        handlers.add(handler);
+        return () => handlers?.delete(handler);
+      },
     },
   } as unknown as ExtensionAPI;
 
@@ -135,7 +168,14 @@ export function createPiHarness() {
     notifications,
     statuses,
     compactCalls,
+    execCalls,
     context,
+    emitEvent: (channel: string, data: unknown) => {
+      for (const handler of busHandlers.get(channel) ?? []) handler(data);
+    },
+    setExecImplementation: (implementation: typeof execImplementation) => {
+      execImplementation = implementation;
+    },
     setContextUsage: (usage: typeof contextUsage) => {
       contextUsage = usage;
     },
@@ -154,9 +194,17 @@ export function createPiHarness() {
       if (!contextEvent) throw new Error("context not registered");
       return contextEvent;
     },
+    turnStart: () => {
+      if (!turnStart) throw new Error("turn_start not registered");
+      return turnStart;
+    },
     turnEnd: () => {
       if (!turnEnd) throw new Error("turn_end not registered");
       return turnEnd;
+    },
+    sessionShutdown: () => {
+      if (!sessionShutdown) throw new Error("session_shutdown not registered");
+      return sessionShutdown;
     },
     agentSettled: () => {
       if (!agentSettled) throw new Error("agent_settled not registered");

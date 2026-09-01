@@ -87,4 +87,6 @@ Im aktiven Trellis-Modus ergänzt ein kurzer **Trellis-Kontextblock** jeden User
 
 Vor jedem LLM-Aufruf ersetzt die **Context-Hygiene** überholte Trellis-Tool-Results und veraltete `read`-Results außerhalb des Projekts durch kurze Hinweise. Das jüngste Result jedes Trellis-Tools, der aktuelle Turn und die Message-Struktur bleiben erhalten. Das **Aufbewahrungsfenster** für externe Reads beträgt standardmäßig drei abgeschlossene Turns und kann mit `TRELLIS_CONTEXT_READ_MAX_AGE_TURNS` auf eine nichtnegative Ganzzahl gesetzt werden.
 
+Innerhalb eines **Story-Fensters** meldet die Extension **Token-Usage** laufend am Turn-Ende über `trellis usage add`. Haupt-Agent-Token-Usage stammt aus `AssistantMessage.usage.totalTokens`; Subagent-Token-Usage stammt aus `usage.totalTokens` der **pi-subagents-Records** aus `subagents:completed` und `subagents:failed`. Erfolgreich gemeldete **Usage-Deltas** werden nicht erneut gesendet. CLI-Fehler erzeugen nur eine UI-Warnung; das ungemeldete Usage-Delta bleibt für den nächsten Turn-End-Versuch erhalten.
+
 Nach einer Änderung mit `edit` oder `write` prüft ein **Dateihinweis**, ob die Datei zu einer abgeschlossenen Story gehört. Der Hinweis wird höchstens einmal pro Story und Sitzung für den nächsten User-Turn eingereiht; die aktuell laufende Story ist ausgenommen.
