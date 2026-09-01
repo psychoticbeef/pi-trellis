@@ -21,10 +21,12 @@
 - **US-15** — Overview-basierte Token-Usage-Attribution
 - **US-16** — Review-Gate zählt proaktive Reviews robust
 - **US-17** — Doppel-Load der Extension prozessweit verhindern
+- **US-18** — Kategorisierte Token-Usage melden
 
 ## Glossary
 
 - **agent-dir** — Basisverzeichnis aus PI_CODING_AGENT_DIR oder ~/.pi/agent.
+- **Assistant-Usage** — Token-Usage aus Assistant-Messages.
 - **Aufbewahrungsfenster** — Anzahl abgeschlossener Turns, die externe read-Results vollständig bleiben.
 - **Auto-Load** — Projektlokales automatisches Laden der Extension durch pi.
 - **Auto-Modus** — Sitzungsmodus, der startbare Stories nacheinander bis done bearbeitet.
@@ -38,6 +40,7 @@
 - **Gate-Rezept** — Stackbezogene CLI-Konfiguration für Lint, Tests und Coverage.
 - **Interview-Prompt** — Strukturierte LLM-Anleitung für das geführte Projekt-Interview.
 - **Kanban-Zusammenfassung** — UI-only Übersicht über Story-Zähler, aktive Arbeit und Risiken.
+- **Legacy-Fallback** — Nicht kategorisierbare Usage als totalTokens-Gesamtwert.
 - **Nutzer-Override** — Projektlokales Subagent-Rezept mit Vorrang vor der globalen Datei.
 - **Onboarding-Modus** — Zustandsabhängige Trellis-Ersteinrichtung über /trellis:init.
 - **Onboarding-Prompt** — LLM-Anleitung zur sicheren Trellis-Ersteinrichtung.

@@ -10,6 +10,8 @@ project:
 glossary:
     - term: agent-dir
       definition: Basisverzeichnis aus PI_CODING_AGENT_DIR oder ~/.pi/agent.
+    - term: Assistant-Usage
+      definition: Token-Usage aus Assistant-Messages.
     - term: Aufbewahrungsfenster
       definition: Anzahl abgeschlossener Turns, die externe read-Results vollständig bleiben.
     - term: Auto-Load
@@ -36,6 +38,8 @@ glossary:
       definition: Strukturierte LLM-Anleitung für das geführte Projekt-Interview.
     - term: Kanban-Zusammenfassung
       definition: UI-only Übersicht über Story-Zähler, aktive Arbeit und Risiken.
+    - term: Legacy-Fallback
+      definition: Nicht kategorisierbare Usage als totalTokens-Gesamtwert.
     - term: Nutzer-Override
       definition: Projektlokales Subagent-Rezept mit Vorrang vor der globalen Datei.
     - term: Onboarding-Modus
@@ -87,12 +91,12 @@ glossary:
     - term: Änderungsreview
       definition: Read-only Architekturprüfung großer Änderungen.
 counters:
-    AS: 17
-    AT: 28
-    DD: 39
-    IT: 17
-    US: 17
-    UT: 39
+    AS: 18
+    AT: 32
+    DD: 42
+    IT: 18
+    US: 18
+    UT: 42
     ac:US-1: 4
     ac:US-2: 4
     ac:US-3: 4
@@ -110,6 +114,7 @@ counters:
     ac:US-15: 7
     ac:US-16: 8
     ac:US-17: 8
+    ac:US-18: 7
 stories:
     - id: US-1
       kind: story
@@ -1644,7 +1649,7 @@ stories:
         - id: US-14.AC-1
           given: Turn enthält Assistant-Messages mit Usage-Daten und pi-subagents-Records.
           when: Extension Turn abschließt.
-          then: Extension summiert Haupt-Agent-Tokens ausschließlich aus Assistant-Usage und Subagent-Tokens ausschließlich aus pi-subagents-Records; LLM liefert oder berechnet keine Werte.
+          then: 'Extension bildet getrennte Haupt-Agent- und Subagent-Anteile: vollständige mit totalTokens abstimmbare Felder input, output, cacheRead und cacheWrite werden kategorisiert; sonst nutzt einzelnes Usage-Objekt bei gültigem totalTokens Legacy-Fallback. Andere Zahlenquellen werden ignoriert.'
         - id: US-14.AC-2
           given: Turn beginnt ohne zugeordnete Story und End-Overview zeigt passende Story als in_progress.
           when: Extension Token-Usage zuordnet.
@@ -1656,7 +1661,7 @@ stories:
         - id: US-14.AC-4
           given: Eindeutig attribuierter Story-Turn erzeugt noch nicht gemeldete Haupt-Agent- oder Subagent-Tokens.
           when: Turn endet.
-          then: Extension führt `trellis usage add <project-id> <story-id> --main N --subagents N` mit genau diesem Delta aus; `<project-id>` stammt aus `trellis-project` in `AGENTS.md`; beobachteter Finish-Turn wird vor Schließen der Zuordnung gemeldet.
+          then: Extension führt pro attribuiertem Usage-Delta kategorisierten `trellis usage add <project-id> <story-id>`-Aufruf mit acht main-/subagents-Kategorieflags und bei Legacy-Fallback getrennten Aufruf mit `--main N --subagents N` aus; kein Aufruf mischt Flag-Formen.
         - id: US-14.AC-5
           given: Bereits erfolgreich gemeldete Token-Usage bleibt in Session-Daten sichtbar.
           when: Späterer Turn endet.
@@ -1669,14 +1674,14 @@ stories:
           given: Overview enthält mehrere in_progress-Storys.
           when: Extension Story anhand Worktree-Pfad und aktuellem ctx.cwd auswählt.
           then: Genau eine Entsprechung erhält Turn-Usage; bei keiner oder mehreren Entsprechungen verwirft Extension Usage, zeigt UI-Warnung und verwendet weder Raten noch Reihenfolge.
-      approved_content_hash: b7f59d5e7b51d3cbb8936cdbb8d700589827480e81fa47c11b58af4d87551802
+      approved_content_hash: f5513b279e36b41d04378bdb4a7fbf061ab7202cd47ffb297a5df1b930e23d48
       children:
         - id: AS-14
           kind: arch
           title: Deterministische Token-Usage-Erfassung im Extension-Adapter
           body: TypeScript-pi-Extension verbindet turn-aktuelle Trellis-Overviews mit turn_end und Lifecycle-Events von pi-subagents. Reine StoryUsageTracker-Komponente attribuiert Token-Usage ausschließlich aus Story-Status und eindeutiger Worktree-Pfad-Entsprechung zu ctx.cwd; Tool-Call-Parsing und Tool-Result-Korrelation entfallen vollständig aus Token-Usage-Attribution. Review-Gate-eigene finish-Erkennung bleibt getrennt in src/review-gate.ts. Endstatus in_progress öffnet oder bestätigt Zuordnung, beobachteter Wechsel derselben Story von in_progress zu done ordnet gesamten Finish-Turn vor Schließen zu. Mehrdeutigkeit und fehlende in_progress-Story verwerfen Token-Usage. Getrennte asynchrone UsageDeltaReporter-Komponente serialisiert `trellis usage add`, bestätigt Usage-Delta nur bei Exit-Code 0 und behält fehlgeschlagene Usage-Deltas. Fehler und mehrdeutige Attribution erzeugen UI-Warnung, blockieren aber keinen Workflow.
           approved_content_hash: 82360879cb1fb7dbe9f9fcec12ff5681d6bf16655a6d4c0ab1eaa1851ce28f4e
-          approved_parent_hash: b7f59d5e7b51d3cbb8936cdbb8d700589827480e81fa47c11b58af4d87551802
+          approved_parent_hash: f5513b279e36b41d04378bdb4a7fbf061ab7202cd47ffb297a5df1b930e23d48
           children:
             - id: DD-31
               kind: detail_design
@@ -1687,9 +1692,9 @@ stories:
               children:
                 - id: UT-31
                   kind: unit_test
-                  title: Overview-basierte Token-Usage-Attribution und Story-Statuswechsel
-                  body: Unit-Tests prüfen Start-, Lauf- und Finish-Turn über Start- und End-Trellis-Overviews, eindeutige Worktree-Pfad-Auswahl bei mehreren in_progress-Storys, Warnung und Verwerfen bei Mehrdeutigkeit, Schließen nach Finish sowie Verwerfen ohne Story. Variierte direkte, Gateway- und mcpScript-artige Aufrufformen beweisen fehlenden Einfluss von Toolnamen, strukturierten Inputs und JavaScript-Code. Jeder Testname enthält ID dieses unit_test.
-                  approved_content_hash: 3d03773b6aba60131e51b847abc508df493c35d43bc3c97e36683c1404e654da
+                  title: Token-Usage-Attribution über Trellis-Overview und Story-Statuswechsel
+                  body: Unit-Tests prüfen Start-, Lauf- und Finish-Turn über Start- und End-Trellis-Overviews, eindeutige Worktree-Pfad-Auswahl bei mehreren in_progress-Storys, Warnung und Verwerfen bei Mehrdeutigkeit, Schließen nach Finish sowie Verwerfen ohne Story. Acceptance-Tests beweisen fehlenden Einfluss direkter, Gateway- und mcpScript-artiger Tool-Aufrufformen. Jeder Testname enthält ID dieses unit_test.
+                  approved_content_hash: 08c716728a9be71fff0aee62527fd1e33a1ce3ce3ffa4f57c4a054b0522628bb
                   approved_parent_hash: 29367b7f1baf798f35f9db26641cc6d9834271c7274f4aab71418e7245988a67
                   evidence:
                     tests:
@@ -1698,17 +1703,17 @@ stories:
                     recorded_at: "2026-09-01T13:21:46Z"
             - id: DD-32
               kind: detail_design
-              title: Usage-Quellen und eindeutige Deltas
-              body: StoryUsageTracker liest Haupt-Agent-Token-Usage ausschließlich aus AssistantMessage.usage.totalTokens am turn_end. pi.events-Listener sammeln pi-subagents-Records aus subagents:completed und subagents:failed, verwenden ausschließlich usage.totalTokens und deduplizieren anhand Record-id; Records ohne gültige nichtnegative Usage zählen null. Tracker erzeugt pro Story und Turn ein Usage-Delta aus Haupt-Agent- und Subagent-Token-Usage. Erfolgreich bestätigte Deltas werden nie erneut erzeugt; neue Deltas bleiben getrennt von bereits laufender Meldung.
-              approved_content_hash: 3506ba157cb16ddbfdf44b8148867b4b075190b394771c934a7e8fa9cb812f18
+              title: Usage-Quellen, Kategorien und eindeutige Deltas
+              body: StoryUsageTracker liest Haupt-Agent-Token-Usage ausschließlich aus Assistant-Usage am turn_end. pi.events-Listener sammeln pi-subagents-Records aus subagents:completed und subagents:failed und deduplizieren anhand Record-id. Vollständige, nichtnegative sichere Ganzzahlen für input, output, cacheRead und cacheWrite werden kategorisiert, wenn ihre Summe gültigem totalTokens entspricht; sonst nutzt das einzelne Usage-Objekt bei gültigem totalTokens ausschließlich Legacy-Fallback. Tracker erzeugt pro Story und Turn Usage-Delta aus getrennten Haupt-Agent- und Subagent-Anteilen. Erfolgreich bestätigte Deltas werden nie erneut erzeugt; neue Deltas bleiben getrennt von bereits laufender Meldung.
+              approved_content_hash: d15c31d97051d067453f4dd1b7c0dd91d912e21095b2ec0e38dc9c37ad1bd697
               approved_parent_hash: 82360879cb1fb7dbe9f9fcec12ff5681d6bf16655a6d4c0ab1eaa1851ce28f4e
               children:
                 - id: UT-32
                   kind: unit_test
-                  title: Assistant- und pi-subagents-Usage
-                  body: Unit-Tests prüfen totalTokens aus AssistantMessage-Usage, completed- und failed-pi-subagents-Records, Record-Deduplizierung, fehlende oder ungültige Usage, getrennte Haupt-Agent-/Subagent-Summen sowie keine erneute Ausgabe bereits bestätigter Token-Usage. Jeder Testname enthält ID dieses unit_test.
-                  approved_content_hash: 86b43f87b8332ce8f79e813fb649ebad37a1239ccf0f9658a1b59d21491d9d93
-                  approved_parent_hash: 3506ba157cb16ddbfdf44b8148867b4b075190b394771c934a7e8fa9cb812f18
+                  title: Assistant-Usage und pi-subagents-Usage
+                  body: Unit-Tests prüfen Kategorien und Legacy-Fallback aus Assistant-Usage sowie completed- und failed-pi-subagents-Records, Record-Deduplizierung, fehlende oder ungültige Usage, getrennte Haupt-Agent-/Subagent-Summen und Token-Erhaltung. Jeder Testname enthält ID dieses unit_test.
+                  approved_content_hash: a1dd396b3c8662d99e31e583fb30948707c5bf3ebdffa980d9f8985644cccdf0
+                  approved_parent_hash: d15c31d97051d067453f4dd1b7c0dd91d912e21095b2ec0e38dc9c37ad1bd697
                   evidence:
                     tests:
                         - test/token-usage.test.ts::UT-32 Haupt-Agent-Token-Usage und Subagent-Token-Usage aus pi-subagents-Records > UT-32 liest ausschließlich gültige totalTokens und dedupliziert pi-subagents-Records
@@ -1716,17 +1721,17 @@ stories:
                     recorded_at: "2026-09-01T13:21:46Z"
             - id: DD-33
               kind: detail_design
-              title: Nicht blockierende CLI-Meldung und Retry
-              body: UsageDeltaReporter erhält Project-ID aus dem vorhandenen TrellisProject, hält pending Haupt-Agent- und Subagent-Token-Usage pro Story und serialisiert Meldungen. flush startet über injizierte Exec-Funktion `trellis usage add <project-id> <story-id> --main N --subagents N` ohne Await im turn_end-Handler. Exit-Code 0 zieht exakt gesendetes Usage-Delta ab; Throw oder anderer Exit-Code behält es und ruft injizierte Warnfunktion auf. Nächster turn_end stößt Retry auch nach geschlossenem Story-Fenster an. Reporter wirft nicht in Agent-Hooks und blockiert weder Tool-Call noch Story-Workflow.
-              approved_content_hash: 7e138312078e9f9181b334e63e3c2acb14e94afb987fcea459f010f8e497f7cc
+              title: Nicht blockierende kategorisierte CLI-Meldung und Retry
+              body: UsageDeltaReporter erhält Project-ID aus vorhandenem TrellisProject, hält pending kategorisierte und Legacy-Anteile pro Story und serialisiert Meldungen. flush startet über injizierte Exec-Funktion kategorisierte trellis usage add-Aufrufe mit acht main-/subagents-Flags und getrennte Legacy-Aufrufe mit --main und --subagents ohne Await im turn_end-Handler. Kein Aufruf mischt Flag-Formen. Exit-Code 0 zieht exakt Meldespur-Snapshot ab; Throw oder anderer Exit-Code behält nur fehlgeschlagenen Snapshot und ruft injizierte Warnfunktion auf. Nächster turn_end stößt Retry auch nach geschlossenem Story-Fenster an. Reporter wirft nicht in Agent-Hooks und blockiert weder Tool-Call noch Story-Workflow.
+              approved_content_hash: e6f541d7620fdd4c876bbcfece7b4e02eb271922897c2e983f525124e7cd9ea9
               approved_parent_hash: 82360879cb1fb7dbe9f9fcec12ff5681d6bf16655a6d4c0ab1eaa1851ce28f4e
               children:
                 - id: UT-33
                   kind: unit_test
-                  title: CLI-Argumente, Serialisierung und Retry
-                  body: Unit-Tests prüfen exakte Argumentliste für trellis usage add, Project-ID und Story-ID, Exit-Code 0, Nicht-Null-Exit, Throw, Erhalt fehlgeschlagener Usage-Deltas, Retry am nächsten turn_end, neue Token-Usage während laufender Meldung, Warnung und nicht wartenden Hook-Rücklauf. Jeder Testname enthält ID dieses unit_test.
-                  approved_content_hash: 03aaa39230a177f24aa7d2b00a17d8232af4bc3d3d8770bb831f210fa372eb03
-                  approved_parent_hash: 7e138312078e9f9181b334e63e3c2acb14e94afb987fcea459f010f8e497f7cc
+                  title: Kategorisierte CLI-Argumente, Serialisierung und Retry
+                  body: Unit-Tests prüfen exakte kategorisierte und Legacy-Argumentlisten für trellis usage add, Project-ID und Story-ID, nie gemischte Flag-Formen, unabhängige Bestätigung, Nicht-Null-Exit, Throw, Erhalt fehlgeschlagener Usage-Deltas, Retry, neue Token-Usage während laufender Meldung, Warnung und nicht wartenden Hook-Rücklauf. Jeder Testname enthält ID dieses unit_test.
+                  approved_content_hash: 65a39e9880b86e9437c9d752f959d3e02ecb1eaa6495fa0e4bf1f070120c5322
+                  approved_parent_hash: e6f541d7620fdd4c876bbcfece7b4e02eb271922897c2e983f525124e7cd9ea9
                   evidence:
                     tests:
                         - test/token-usage.test.ts::UT-33 CLI-Argumente, Serialisierung und Retry > UT-33 sendet exakte Usage-Deltas einmal, serialisiert neue Token-Usage und kehrt ohne Await zurück
@@ -1735,8 +1740,8 @@ stories:
             - id: IT-14
               kind: integration_test
               title: Turn-, Tool-, Event- und CLI-Integration im pi-Harness
-              body: Integration-Test lädt Extension im pi-Harness, aktiviert sie aus AGENTS.md, liefert turn-aktuelle Trellis-Overviews für startende, laufende, beendete, fehlende und mehrfach in_progress befindliche Storys, setzt ctx.cwd und erzeugt AssistantMessage-Usage sowie completed/failed-pi-subagents-Records. Er prüft Story-Zuordnung unabhängig von Tool-Aufrufformen, eindeutige Worktree-Pfad-Auswahl, exakte trellis-CLI-Aufrufe, asynchronen Hook-Rücklauf, Retry und UI-Warnung. Testname enthält ID dieses integration_test.
-              approved_content_hash: e08b301eb2a6c8a826852e04ad1c0f8da78ff69c98b2628e74c16daa5ba05ca4
+              body: Integration-Test lädt Extension im pi-Harness, aktiviert sie aus AGENTS.md, liefert turn-aktuelle Trellis-Overviews für startende, laufende, beendete, fehlende und mehrfach in_progress befindliche Storys, setzt ctx.cwd und erzeugt Assistant-Usage sowie completed/failed-pi-subagents-Records. Er prüft Story-Zuordnung unabhängig von Tool-Aufrufformen, eindeutige Worktree-Pfad-Auswahl, kategorisierte und Legacy-Aufrufe von trellis usage add, asynchronen Hook-Rücklauf, Retry und UI-Warnung. Testname enthält ID dieses integration_test.
+              approved_content_hash: 6aa16bd5e7035d33893077e97c4d782997783d50b925cd742861d5c7bb275b1e
               approved_parent_hash: 82360879cb1fb7dbe9f9fcec12ff5681d6bf16655a6d4c0ab1eaa1851ce28f4e
               evidence:
                 tests:
@@ -1748,11 +1753,11 @@ stories:
         - id: AT-19
           kind: acceptance_test
           title: Vertrauenswürdige getrennte Usage-Quellen
-          body: Acceptance-Test erzeugt AssistantMessage-Usage und completed/failed-pi-subagents-Records innerhalb eines Story-Fensters. Gemeldete Haupt-Agent- und Subagent-Werte entsprechen ausschließlich jeweiligen totalTokens; Text oder LLM-Ausgaben beeinflussen keine Werte. Testname enthält ID dieses acceptance_test.
+          body: Acceptance-Test erzeugt Assistant-Usage und completed/failed-pi-subagents-Records innerhalb eines Story-Fensters. Gemeldete Haupt-Agent- und Subagent-Werte entsprechen ausschließlich vollständigen Kategorien oder Legacy-Fallback aus jeweiligem totalTokens; Text oder LLM-Ausgaben beeinflussen keine Werte. Testname enthält ID dieses acceptance_test.
           covers:
             - US-14.AC-1
-          approved_content_hash: e699e05c93446b989d2611a25997bee9b7918c47bfd78b7c1f05ff26cc3f8462
-          approved_parent_hash: b7f59d5e7b51d3cbb8936cdbb8d700589827480e81fa47c11b58af4d87551802
+          approved_content_hash: 6c14dec5286188d771858f9c8fc09886a9e1bc62e89a5837bcba63633bf659a1
+          approved_parent_hash: f5513b279e36b41d04378bdb4a7fbf061ab7202cd47ffb297a5df1b930e23d48
           evidence:
             tests:
                 - test/acceptance-token-usage.test.ts::US-14 Token-Usage pro Story > AT-19 IT-14 trennt Haupt-Agent-Token-Usage und Subagent-Token-Usage aus pi-subagents-Records
@@ -1766,7 +1771,7 @@ stories:
             - US-14.AC-3
             - US-14.AC-7
           approved_content_hash: daa71636b79d06ddb4e78e5728a7d391530c7209a170c813e4f4b20de58e2a7a
-          approved_parent_hash: b7f59d5e7b51d3cbb8936cdbb8d700589827480e81fa47c11b58af4d87551802
+          approved_parent_hash: f5513b279e36b41d04378bdb4a7fbf061ab7202cd47ffb297a5df1b930e23d48
           evidence:
             tests:
                 - test/acceptance-token-usage.test.ts::US-14 Token-Usage pro Story > AT-20 IT-14 ordnet Start- bis Finish-Turn zu und verwirft Außen-Turns
@@ -1774,12 +1779,12 @@ stories:
         - id: AT-21
           kind: acceptance_test
           title: Laufende genaue Usage-Deltas melden
-          body: Acceptance-Test beendet mehrere eindeutig per Overview attribuierte Turns und prüft pro Turn exakte nicht erneut gesendete Usage-Deltas über `trellis usage add` mit Project-ID aus AGENTS.md und Story-ID. Beobachteter Wechsel in_progress zu done wird als Finish-Turn gemeldet, bevor Story-Zuordnung schließt. Testname enthält ID dieses acceptance_test.
+          body: Acceptance-Test beendet mehrere eindeutig per Trellis-Overview attribuierte Turns und prüft pro Turn exakte nicht erneut gesendete Usage-Deltas über kategorisierte oder getrennte Legacy-Aufrufe von trellis usage add mit Project-ID aus AGENTS.md und Story-ID. Beobachteter Wechsel in_progress zu done wird als Finish-Turn gemeldet, bevor Story-Zuordnung schließt. Testname enthält ID dieses acceptance_test.
           covers:
             - US-14.AC-4
             - US-14.AC-5
-          approved_content_hash: dcd3bee8a391bd5234c1b3264730f1f158eba9998dda9f7f224131fa026fee1e
-          approved_parent_hash: b7f59d5e7b51d3cbb8936cdbb8d700589827480e81fa47c11b58af4d87551802
+          approved_content_hash: 0b1a561d23f2efdc8a3094fd662fb85c5d916cf67f6211e90e107f3e371c0e5c
+          approved_parent_hash: f5513b279e36b41d04378bdb4a7fbf061ab7202cd47ffb297a5df1b930e23d48
           evidence:
             tests:
                 - test/acceptance-token-usage.test.ts::US-14 Token-Usage pro Story > AT-21 IT-14 meldet laufende genaue Usage-Deltas einschließlich Finish-Turn ohne erneute Sendung
@@ -1791,7 +1796,7 @@ stories:
           covers:
             - US-14.AC-6
           approved_content_hash: 81c4ad53c84d5dc4d07419462582e9f8988bda328c407744278e175127619edf
-          approved_parent_hash: b7f59d5e7b51d3cbb8936cdbb8d700589827480e81fa47c11b58af4d87551802
+          approved_parent_hash: f5513b279e36b41d04378bdb4a7fbf061ab7202cd47ffb297a5df1b930e23d48
           evidence:
             tests:
                 - test/acceptance-token-usage.test.ts::US-14 Token-Usage pro Story > AT-22 IT-14 warnt bei CLI-Fehler, blockiert turn_end nicht und versucht Usage-Delta erneut
@@ -1856,9 +1861,9 @@ stories:
               children:
                 - id: UT-34
                   kind: unit_test
-                  title: Overview-basierte Token-Usage-Attribution im Story-Fenster
-                  body: Unit-Tests prüfen ausschließlich Overview-basierte Token-Usage-Attribution im Story-Fenster für Start-Turn, laufenden Turn und Statuswechsel in_progress zu done, Schließen nach Finish sowie Verwerfen ohne in_progress-Story. Tests beweisen zusätzlich, dass beliebige Toolnamen, strukturierte Tool-Inputs und JavaScript-Code Attribution nicht steuern. Jeder Testname enthält ID dieses unit_test.
-                  approved_content_hash: 01a3d4d9afac2f5764463b1771a3cabbf1540c23f9784fd8b2f43be721d52a94
+                  title: Token-Usage-Attribution über Trellis-Overview im Story-Fenster
+                  body: Unit-Tests prüfen Token-Usage-Attribution über Trellis-Overview im Story-Fenster für Start-Turn, laufenden Turn und Statuswechsel in_progress zu done, Schließen nach Finish sowie Verwerfen ohne in_progress-Story. Acceptance-Tests beweisen zusätzlich, dass Toolnamen, strukturierte Tool-Inputs und JavaScript-Code Attribution nicht steuern. Jeder Testname enthält ID dieses unit_test.
+                  approved_content_hash: 9442cc5a24112382e73f04407a11424666504ccc2baf79dd54e1291a30a0c1d3
                   approved_parent_hash: 9570ab42b0b392ad4099fae440bcb3fb3003b2a44ce685d2e7af5fd9be0e8962
                   evidence:
                     tests:
@@ -1875,8 +1880,8 @@ stories:
                 - id: UT-35
                   kind: unit_test
                   title: Worktree-Pfad-Entsprechung, Genau-einmal und Retry
-                  body: Unit-Tests prüfen mehrere in_progress-Storys mit genau einer, keiner und mehreren Worktree-Entsprechungen, Warnung ohne Fehlzuordnung sowie unveränderte Genau-einmal-, Serialisierungs- und Retry-Semantik des UsageDeltaReporter. Jeder Testname enthält ID dieses unit_test.
-                  approved_content_hash: ce4d1e12339b510010ffbedda03e189ef333e7f4c12c1831219860574150247c
+                  body: Unit-Tests prüfen mehrere in_progress-Storys mit genau einer und keiner Worktree-Pfad-Entsprechung, Warnung ohne Fehlzuordnung sowie Genau-einmal-, Serialisierungs- und spurbezogene Retry-Semantik des UsageDeltaReporter. Acceptance-Test AT-24 prüft zusätzlich mehrere Worktree-Pfad-Entsprechungen. Jeder Testname enthält ID dieses unit_test.
+                  approved_content_hash: ea6c1986ebf2cf1c731d5dcccff22b10694d590e2c9ed172bb8206c50badba1d
                   approved_parent_hash: 5f405cbed3fea414b126340246cbf64c1ffdfcd850d9bacae1e8a3d785450aa8
                   evidence:
                     tests:
@@ -2201,3 +2206,172 @@ stories:
                 - test/acceptance-doppel-load.test.ts::AT-28 Doppel-Load bleibt sichtbarer No-op mit erster Instanz als Besitzerin > AT-28 lässt projektlokale Erstladung allein registrieren und über Sessions aktiv
                 - test/acceptance-doppel-load.test.ts::AT-28 Doppel-Load bleibt sichtbarer No-op mit erster Instanz als Besitzerin > AT-28 lässt bei umgekehrter direkter Reihenfolge globale Instanz gewinnen
             recorded_at: "2026-09-01T18:21:02Z"
+    - id: US-18
+      kind: story
+      title: Kategorisierte Token-Usage melden
+      body: TypeScript-pi-Extension meldet Token-Usage aus Assistant-Usage und pi-subagents-Records nach input, output, cacheRead und cacheWrite getrennt. Token-Usage-Attribution über Trellis-Overview, Usage-Delta, Genau-einmal-Meldung und Retry bleiben erhalten. Nicht kategorisierbare Usage nutzt verlustfreien Legacy-Fallback ohne gemischte Flag-Formen.
+      status: done
+      paths:
+        - src/token-usage.ts
+        - test/token-usage.test.ts
+        - test/acceptance-token-usage.test.ts
+        - README.md
+      acceptance_criteria:
+        - id: US-18.AC-1
+          given: Assistant-Usage oder pi-subagents-Record enthält `input`, `output`, `cacheRead`, `cacheWrite`.
+          when: Extension Usage-Delta bildet.
+          then: Extension summiert Felder getrennt nach Haupt-Agent und Subagent; `totalTokens` ersetzt Kategorien nicht.
+        - id: US-18.AC-2
+          given: Attribuiertes Usage-Delta enthält kategorisierbare Haupt-Agent- oder Subagent-Usage.
+          when: Extension Meldung ausführt.
+          then: '`trellis usage add` nutzt passende Flags `--main-input`, `--main-output`, `--main-cache-read`, `--main-cache-write`, `--subagents-input`, `--subagents-output`, `--subagents-cache-read`, `--subagents-cache-write` mit exakten Deltas.'
+        - id: US-18.AC-3
+          given: Usage-Objekt besitzt nicht alle vier Einzelfelder oder Kategorien lassen sich nicht verlustfrei mit gültigem `totalTokens` abstimmen.
+          when: Extension Objekt verarbeitet.
+          then: Extension meldet gesamtes `totalTokens` dieses Objekts über `--main` beziehungsweise `--subagents`; Teilkategorien dieses Objekts werden nicht gemeldet.
+        - id: US-18.AC-4
+          given: Usage-Delta enthält kategorisierte und Legacy-Fallback-Anteile.
+          when: Extension Meldung ausführt.
+          then: Extension erzeugt mindestens zwei getrennte `trellis usage add`-Aufrufe; kein Aufruf mischt Legacy-Flags mit kategorisierten Flags.
+        - id: US-18.AC-5
+          given: Haupt-Agent- und Subagent-Usage enthält beliebige Mischung kategorisierbarer und Legacy-Objekte.
+          when: Alle zugehörigen Meldungen erfolgreich enden.
+          then: Summe aller gemeldeten Kategorien plus Legacy-Werte entspricht Summe bisher verwendeter gültiger `totalTokens`; kein Token fehlt oder zählt doppelt.
+        - id: US-18.AC-6
+          given: Meldung benötigt mehrere Aufrufe und beliebige Teilmenge scheitert.
+          when: Späterer Turn endet.
+          then: Extension bestätigt erfolgreiche Deltas einzeln, sendet sie nie erneut, behält nur fehlgeschlagene Deltas und versucht nur diese erneut; UI-Warnung und nicht blockierendes Verhalten aus `US-15.AC-7` bleiben.
+        - id: US-18.AC-7
+          given: Kategorisierte Usage entsteht innerhalb oder außerhalb Story-Fenster.
+          when: Extension Usage attribuiert.
+          then: Token-Usage-Attribution über Trellis-Overview aus `US-15.AC-1–6`, getrennte Quellen aus `US-14.AC-1` und Deduplizierung von pi-subagents-Records bleiben unverändert.
+      approved_content_hash: 5218cea60e089e37a4375352f28dabef62b4dd974b1aa34dd2fd9b6143505d0a
+      children:
+        - id: AS-18
+          kind: arch
+          title: Verlustfreie kategorisierte Token-Usage im Extension-Adapter
+          body: src/token-usage.ts normalisiert jede Assistant-Usage und jeden pi-subagents-Record in vier Kategorien oder genau einen Legacy-Fallback. StoryUsageTracker behält Token-Usage-Attribution über Trellis-Overview und erzeugt Usage-Delta mit getrennten Haupt-Agent- und Subagent-Anteilen. UsageDeltaReporter verwaltet kategorisierte und Legacy-Anteile als unabhängig bestätigbare Meldespuren, erzeugt niemals gemischte Flag-Formen und bewahrt Genau-einmal- sowie Retry-Semantik. src/index.ts behält bestehende Lifecycle-Integration.
+          approved_content_hash: e529183430f922652fe59493d1af134fa5479303f959dc6c7c547077595f8a51
+          approved_parent_hash: 5218cea60e089e37a4375352f28dabef62b4dd974b1aa34dd2fd9b6143505d0a
+          children:
+            - id: DD-40
+              kind: detail_design
+              title: Objektweise Usage-Normalisierung und Token-Erhaltung
+              body: Usage-Normalisierung akzeptiert nichtnegative sichere Ganzzahlen. Sind input, output, cacheRead und cacheWrite vollständig vorhanden und entspricht ihre Summe gültigem totalTokens, entsteht kategorisierte Usage. Sonst entsteht bei gültigem totalTokens ausschließlich Legacy-Usage. StoryUsageTracker summiert normalisierte Assistant-Usage und deduplizierte pi-subagents-Records getrennt nach Haupt-Agent und Subagent; zwischen Turns eingegangene Records bleiben erhalten. Summe aller Kategorien und Legacy-Anteile entspricht bisher ausgewertetem totalTokens.
+              approved_content_hash: bec943567675bbfea9a427f1ccb3bdbf4c12fbcc8e5725aeb098daaf88144dcf
+              approved_parent_hash: e529183430f922652fe59493d1af134fa5479303f959dc6c7c547077595f8a51
+              children:
+                - id: UT-40
+                  kind: unit_test
+                  title: Kategorisierte Quellen, Fallback und Erhaltung
+                  body: Unit-Tests prüfen vollständige Kategorien für Assistant-Usage und pi-subagents-Records, objektweisen Legacy-Fallback bei fehlenden oder nicht abstimmbaren Einzelfeldern, sichere Ganzzahlen, Subagent-Deduplizierung und Erhalt von totalTokens über gemischte Objekte. Jeder Testname enthält diese Spec-ID.
+                  approved_content_hash: 9b5d5286e4312c81dd14451c1133a343465047a8d002c64bb2a7c0739b65b4a1
+                  approved_parent_hash: bec943567675bbfea9a427f1ccb3bdbf4c12fbcc8e5725aeb098daaf88144dcf
+                  evidence:
+                    tests:
+                        - test/token-usage.test.ts::UT-32 UT-40 Kategorisierte Quellen, Fallback und Erhaltung > UT-40 summiert Kategorien und fällt objektweise verlustfrei auf totalTokens zurück
+                        - test/token-usage.test.ts::UT-32 UT-40 Kategorisierte Quellen, Fallback und Erhaltung > UT-40 akkumuliert sichere Einzelwerte ohne Präzisionsverlust
+                        - test/token-usage.test.ts::UT-32 UT-40 Kategorisierte Quellen, Fallback und Erhaltung > UT-40 ignoriert ungültige Totals und erhält Legacy-Usage zwischen Turns
+                    recorded_at: "2026-09-01T20:14:47Z"
+            - id: DD-41
+              kind: detail_design
+              title: Getrennte Reporter-Meldespuren und teilweiser Retry
+              body: UsageDeltaReporter akkumuliert pro Projekt und Story kategorisierte Haupt-Agent- und Subagent-Felder sowie Legacy-Haupt-Agent- und Legacy-Subagent-Werte. Flush erzeugt kategorisierten trellis usage add-Aufruf nur für vorhandene Kategorien und getrennten Legacy-Aufruf nur für vorhandene Legacy-Werte. Erfolgreicher Aufruf bestätigt nur eigenen Snapshot; fehlgeschlagener Aufruf bleibt pending, warnt und wird bei späterem turn_end erneut versucht. Während laufendem Flush hinzugefügtes Usage-Delta bleibt für Folge-Flush erhalten.
+              approved_content_hash: 9f82763217105b5601b9509ee6a8a4b05efc34eae9796dfeca63fdb2de12ef5e
+              approved_parent_hash: e529183430f922652fe59493d1af134fa5479303f959dc6c7c547077595f8a51
+              children:
+                - id: UT-41
+                  kind: unit_test
+                  title: CLI-Flags, getrennte Bestätigung und Retry
+                  body: Unit-Tests prüfen exakte acht kategorisierte Flags, reine Legacy-Flags, niemals gemischte Formen, getrennte Aufrufe bei gemischtem Usage-Delta, unabhängige Bestätigung bei Teilerfolg, Retry nur fehlgeschlagener Anteile, Serialisierung und neue Usage während laufendem Flush. Jeder Testname enthält diese Spec-ID.
+                  approved_content_hash: b7125be85b4b01d1ae9b33acb42d68f24126c7c68b78339189af1be6ed2bc815
+                  approved_parent_hash: 9f82763217105b5601b9509ee6a8a4b05efc34eae9796dfeca63fdb2de12ef5e
+                  evidence:
+                    tests:
+                        - test/token-usage.test.ts::UT-33 UT-41 CLI-Flags, getrennte Bestätigung und Retry > UT-41 sendet Kategorien und Legacy in getrennten Aufrufen
+                        - test/token-usage.test.ts::UT-33 UT-41 CLI-Flags, getrennte Bestätigung und Retry > UT-41 bestätigt Teilerfolg und versucht nur fehlgeschlagene Meldespur erneut
+                        - test/token-usage.test.ts::UT-33 UT-41 CLI-Flags, getrennte Bestätigung und Retry > UT-41 serialisiert während laufendem Flush hinzugefügte Kategorien
+                    recorded_at: "2026-09-01T20:14:47Z"
+            - id: DD-42
+              kind: detail_design
+              title: Unveränderte Token-Usage-Attribution und Lifecycle-Anbindung
+              body: src/index.ts leitet Assistant-Messages und completed/failed pi-subagents-Records unverändert an StoryUsageTracker. Auswahl über Trellis-Overview, Story-Fenster und Worktree-Pfad bleibt unverändert. Nur attribuierte Usage-Delta-Darstellung und Reporter-Argumente ändern sich; Außen-Turns, mehrdeutige Zuordnung und bereits gesehene pi-subagents-Records bleiben verworfen.
+              approved_content_hash: a30694a8b38587d982cc92b3dbac5307b83d60aef0f054939e40617f43d8e096
+              approved_parent_hash: e529183430f922652fe59493d1af134fa5479303f959dc6c7c547077595f8a51
+              children:
+                - id: UT-42
+                  kind: unit_test
+                  title: Attributions- und Deduplizierungsregression
+                  body: Unit-Tests prüfen Start-, Lauf-, Finish- und Außen-Turns, eindeutige Worktree-Pfad-Auswahl, Warnung bei Mehrdeutigkeit sowie pi-subagents-Record-Deduplizierung mit kategorisierter und Legacy-Usage. Jeder Testname enthält diese Spec-ID.
+                  approved_content_hash: ebd3cbe88c8c5f78afdf631f28db22f99173b5b21940d5f7384f886df57d67fd
+                  approved_parent_hash: a30694a8b38587d982cc92b3dbac5307b83d60aef0f054939e40617f43d8e096
+                  evidence:
+                    tests:
+                        - test/token-usage.test.ts::UT-31 UT-34 UT-35 UT-42 Token-Usage-Attribution über Trellis-Overview und Deduplizierung > UT-42 attribuiert Start-, Lauf- und Finish-Turn, aber keinen Außen-Turn
+                        - test/token-usage.test.ts::UT-31 UT-34 UT-35 UT-42 Token-Usage-Attribution über Trellis-Overview und Deduplizierung > UT-42 nutzt eindeutigen Worktree-Pfad und warnt bei Mehrdeutigkeit
+                        - test/token-usage.test.ts::UT-31 UT-34 UT-35 UT-42 Token-Usage-Attribution über Trellis-Overview und Deduplizierung > UT-42 dedupliziert kategorisierte pi-subagents-Records und pi-subagents-Records mit Legacy-Usage
+                    recorded_at: "2026-09-01T20:14:47Z"
+            - id: IT-18
+              kind: integration_test
+              title: Turn-, Event- und kategorisierte CLI-Integration im pi-Harness
+              body: Integrationstests treiben pi-Harness durch turn_start, subagents:completed oder subagents:failed und turn_end. Sie prüfen kategorisierte und Legacy-CLI-Aufrufe, gemischte Usage mit getrennten Aufrufen, Token-Erhaltung, partiellen Fehler mit gezieltem Retry sowie unveränderte Token-Usage-Attribution über Trellis-Overview. Jeder Testname enthält diese Spec-ID.
+              approved_content_hash: 43f504fe2361d64493846a5038cd597de23fc0c59eb44146e1d6ba20e27d697b
+              approved_parent_hash: e529183430f922652fe59493d1af134fa5479303f959dc6c7c547077595f8a51
+              evidence:
+                tests:
+                    - test/acceptance-token-usage.test.ts::US-18 Kategorisierte Token-Usage > AT-29 IT-18 meldet acht Kategorien aus Haupt-Agent und pi-subagents-Records
+                    - test/acceptance-token-usage.test.ts::US-18 Kategorisierte Token-Usage > AT-30 IT-18 trennt Kategorien und Legacy ohne Token-Verlust
+                    - test/acceptance-token-usage.test.ts::US-18 Kategorisierte Token-Usage > AT-31 IT-18 bestätigt Teilerfolg und wiederholt nur fehlgeschlagenes Legacy-Delta
+                    - test/acceptance-token-usage.test.ts::US-18 Kategorisierte Token-Usage > AT-32 IT-18 behält Token-Usage-Attribution über Trellis-Overview und Deduplizierung
+                recorded_at: "2026-09-01T20:14:47Z"
+        - id: AT-29
+          kind: acceptance_test
+          title: Kategorisierte Haupt-Agent- und Subagent-Meldung
+          body: Acceptance-Test erzeugt vollständige Usage-Kategorien in Assistant-Usage und pi-subagents-Records, attribuiert Turn per Trellis-Overview und prüft exakte kategorisierte Flags mit getrennten Summen. Testname enthält diese Spec-ID.
+          covers:
+            - US-18.AC-1
+            - US-18.AC-2
+          approved_content_hash: b7de3ca127c0ef0d93ad12f2be5b8e3401a6c7a3ad9ad99bfd69fcfddfd715a4
+          approved_parent_hash: 5218cea60e089e37a4375352f28dabef62b4dd974b1aa34dd2fd9b6143505d0a
+          evidence:
+            tests:
+                - test/acceptance-token-usage.test.ts::US-18 Kategorisierte Token-Usage > AT-29 IT-18 meldet acht Kategorien aus Haupt-Agent und pi-subagents-Records
+            recorded_at: "2026-09-01T20:14:47Z"
+        - id: AT-30
+          kind: acceptance_test
+          title: Legacy-Fallback ohne Mischung und ohne Token-Verlust
+          body: Acceptance-Test kombiniert kategorisierbare und nicht kategorisierbare Usage-Objekte. Er prüft getrennten kategorisierten und Legacy-Aufruf, nie gemischte Flag-Formen sowie Gleichheit zwischen gemeldeter Gesamtsumme und Summe gültiger totalTokens. Testname enthält diese Spec-ID.
+          covers:
+            - US-18.AC-3
+            - US-18.AC-4
+            - US-18.AC-5
+          approved_content_hash: ef6dc8231a0ba644a18324567c3723a041fba911b4a5f1e584bdd99772a04258
+          approved_parent_hash: 5218cea60e089e37a4375352f28dabef62b4dd974b1aa34dd2fd9b6143505d0a
+          evidence:
+            tests:
+                - test/acceptance-token-usage.test.ts::US-18 Kategorisierte Token-Usage > AT-30 IT-18 trennt Kategorien und Legacy ohne Token-Verlust
+            recorded_at: "2026-09-01T20:14:47Z"
+        - id: AT-31
+          kind: acceptance_test
+          title: Teilerfolg bestätigt nur erfolgreiche Meldespur
+          body: Acceptance-Test lässt einen von mehreren Usage-Aufrufen scheitern, prüft UI-Warnung und nicht blockierendes turn_end und bestätigt, dass späterer Turn nur fehlgeschlagene Meldespur erneut sendet. Testname enthält diese Spec-ID.
+          covers:
+            - US-18.AC-6
+          approved_content_hash: 1cb503938bb43f3d372460ac9d93802253bd6999f0eb68a7f33c2ecc19cd0bec
+          approved_parent_hash: 5218cea60e089e37a4375352f28dabef62b4dd974b1aa34dd2fd9b6143505d0a
+          evidence:
+            tests:
+                - test/acceptance-token-usage.test.ts::US-18 Kategorisierte Token-Usage > AT-31 IT-18 bestätigt Teilerfolg und wiederholt nur fehlgeschlagenes Legacy-Delta
+            recorded_at: "2026-09-01T20:14:47Z"
+        - id: AT-32
+          kind: acceptance_test
+          title: Token-Usage-Attribution und Usage-Quellen bleiben stabil
+          body: Acceptance-Test prüft kategorisierte Usage in Start-, Lauf-, Finish- und Außen-Turns, eindeutige Worktree-Pfad-Auswahl und deduplizierte completed/failed pi-subagents-Records. Testname enthält diese Spec-ID.
+          covers:
+            - US-18.AC-7
+          approved_content_hash: 810f6bbccb7aec113bcfac7d277744289a22bc7aa880f56cf59b554bc80c0522
+          approved_parent_hash: 5218cea60e089e37a4375352f28dabef62b4dd974b1aa34dd2fd9b6143505d0a
+          evidence:
+            tests:
+                - test/acceptance-token-usage.test.ts::US-18 Kategorisierte Token-Usage > AT-32 IT-18 behält Token-Usage-Attribution über Trellis-Overview und Deduplizierung
+            recorded_at: "2026-09-01T20:14:47Z"
