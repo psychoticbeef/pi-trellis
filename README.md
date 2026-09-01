@@ -75,6 +75,7 @@ Hinweise:
 
 - `/trellis:on` aktiviert den **Trellis-Modus**, prüft das Projekt und zeigt den Board-Link.
 - `/trellis:off` deaktiviert den Trellis-Modus und entfernt den Statusline-Eintrag.
+- `/trellis:auto on|off` steuert den sitzungsgebundenen **Auto-Modus**. Er setzt startbare Stories nacheinander bis `finish` um, verdichtet nach erfolgreichem `finish` bei mehr als 75 Prozent Kontextnutzung und endet bei leerer Story-Auswahl oder `off`.
 - `/trellis:status` zeigt die aktuelle Kanban-Zusammenfassung ausschließlich in der UI.
 - `/trellis:init` startet zustandsabhängig den **Onboarding-Prompt** oder den **Interview-Prompt**.
 - `/trellis:review [git-range]` startet `change-review` im Foreground; ohne Range wird der Worktree-Diff geprüft.

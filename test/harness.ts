@@ -13,6 +13,10 @@ export type TurnEndHandler = (
   event: { turnIndex: number },
   context: HookContext,
 ) => Promise<void>;
+export type AgentSettledHandler = (
+  event: Record<string, never>,
+  context: HookContext,
+) => Promise<void>;
 export type ContextHandler = (
   event: ContextEvent,
   context: HookContext,
@@ -47,6 +51,15 @@ export interface CommandContext {
 
 export interface HookContext extends CommandContext {
   signal?: AbortSignal;
+  model?: { contextWindow: number };
+  getContextUsage: () => { tokens: number | null; contextWindow: number; percent: number | null } | undefined;
+  compact: (options?: CompactOptions) => void;
+}
+
+export interface CompactOptions {
+  customInstructions?: string;
+  onComplete?: (result: unknown) => void;
+  onError?: (error: Error) => void;
 }
 
 export function createPiHarness() {
@@ -64,8 +77,12 @@ export function createPiHarness() {
   let beforeAgentStart: BeforeAgentStartHandler | undefined;
   let contextEvent: ContextHandler | undefined;
   let turnEnd: TurnEndHandler | undefined;
+  let agentSettled: AgentSettledHandler | undefined;
   let toolCall: ToolCallHandler | undefined;
   let toolResult: ToolResultHandler | undefined;
+  let contextUsage: { tokens: number | null; contextWindow: number; percent: number | null } | undefined;
+  let modelContextWindow = 1_000;
+  const compactCalls: CompactOptions[] = [];
 
   const api = {
     registerCommand(name: string, options: { handler: CommandHandler }) {
@@ -73,12 +90,13 @@ export function createPiHarness() {
     },
     on(
       event: string,
-      handler: SessionStartHandler | BeforeAgentStartHandler | ContextHandler | TurnEndHandler | ToolCallHandler | ToolResultHandler,
+      handler: SessionStartHandler | BeforeAgentStartHandler | ContextHandler | TurnEndHandler | AgentSettledHandler | ToolCallHandler | ToolResultHandler,
     ) {
       if (event === "session_start") sessionStart = handler as SessionStartHandler;
       if (event === "before_agent_start") beforeAgentStart = handler as BeforeAgentStartHandler;
       if (event === "context") contextEvent = handler as ContextHandler;
       if (event === "turn_end") turnEnd = handler as TurnEndHandler;
+      if (event === "agent_settled") agentSettled = handler as AgentSettledHandler;
       if (event === "tool_call") toolCall = handler as ToolCallHandler;
       if (event === "tool_result") toolResult = handler as ToolResultHandler;
     },
@@ -95,6 +113,13 @@ export function createPiHarness() {
 
   const context = (cwd: string): HookContext => ({
     cwd,
+    model: {
+      get contextWindow() {
+        return modelContextWindow;
+      },
+    },
+    getContextUsage: () => contextUsage,
+    compact: (options = {}) => compactCalls.push(options),
     ui: {
       notify: (message, level) => notifications.push({ message, level }),
       setStatus: (key, value) => statuses.push({ key, value }),
@@ -109,7 +134,14 @@ export function createPiHarness() {
     userMessages,
     notifications,
     statuses,
+    compactCalls,
     context,
+    setContextUsage: (usage: typeof contextUsage) => {
+      contextUsage = usage;
+    },
+    setModelContextWindow: (value: number) => {
+      modelContextWindow = value;
+    },
     sessionStart: () => {
       if (!sessionStart) throw new Error("session_start not registered");
       return sessionStart;
@@ -125,6 +157,10 @@ export function createPiHarness() {
     turnEnd: () => {
       if (!turnEnd) throw new Error("turn_end not registered");
       return turnEnd;
+    },
+    agentSettled: () => {
+      if (!agentSettled) throw new Error("agent_settled not registered");
+      return agentSettled;
     },
     toolCall: () => {
       if (!toolCall) throw new Error("tool_call not registered");
