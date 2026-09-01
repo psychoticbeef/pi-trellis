@@ -1,3 +1,5 @@
+import { transitionFromToolCall } from "./token-usage.js";
+
 export const REVIEWERS = [
   "pre-finish-review",
   "relic-hunter",
@@ -109,16 +111,8 @@ export function finishStoryIdFromToolCall(
   toolName: string,
   input: Record<string, unknown>,
 ): string | undefined {
-  if (isDirectTrellisTransition(toolName)) {
-    return finishStoryId(input);
-  }
-
-  if (toolName !== "mcp") return undefined;
-  if (input.server !== undefined && input.server !== "trellis") return undefined;
-  if (input.tool !== "transition" && input.tool !== "trellis_transition") return undefined;
-
-  const args = parseArgs(input.args);
-  return args ? finishStoryId(args) : undefined;
+  const transition = transitionFromToolCall(toolName, input);
+  return transition?.action === "finish" ? transition.storyId : undefined;
 }
 
 export function reviewGateReason(
@@ -134,32 +128,4 @@ export function reviewGateReason(
 
 function isReviewer(value: string): value is Reviewer {
   return (REVIEWERS as readonly string[]).includes(value);
-}
-
-function isDirectTrellisTransition(toolName: string): boolean {
-  return toolName === "trellis_transition" ||
-    toolName === "mcp__trellis__transition" ||
-    toolName.endsWith(".trellis_transition");
-}
-
-function finishStoryId(input: Record<string, unknown>): string | undefined {
-  if (input.action !== "finish") return undefined;
-  return typeof input.story_id === "string" && input.story_id.length > 0
-    ? input.story_id
-    : undefined;
-}
-
-function parseArgs(value: unknown): Record<string, unknown> | undefined {
-  if (isRecord(value)) return value;
-  if (typeof value !== "string") return undefined;
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return isRecord(parsed) ? parsed : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
