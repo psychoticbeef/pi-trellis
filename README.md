@@ -69,7 +69,7 @@ Hinweise:
 
 - Der `release`-Branch (`main`) entsteht beim ersten `trellis release`.
 - Bei lokalem Laden außerhalb von `<agent-dir>/git` oder `<agent-dir>/npm` ist `postinstall` absichtlich ein No-op. Fehlt ein Rezept sowohl projektlokal als auch global, legt die Aktivierung es ausschließlich global und create-if-absent an; der Projekt-Worktree bleibt unverändert.
-- Wer das pi-trellis-Repo selbst bearbeitet: dort lädt `.pi/settings.json` die lokale Entwicklungsversion — die globale Installation nicht zusätzlich aktivieren, sonst läuft die Extension doppelt.
+- Wer das pi-trellis-Repo selbst bearbeitet: `.pi/settings.json` lädt als Settings-Extension zuerst die lokale Entwicklungsversion. Zusätzlich gefundene pi-Package-Instanzen bleiben beim Doppel-Load No-op; kurzer UI-Hinweis meldet übersprungene Instanz.
 
 ## Commands
 
