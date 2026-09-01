@@ -1,9 +1,5 @@
-export type TrellisTransitionAction = "start" | "finish";
-
-export interface TrellisTransition {
-  action: TrellisTransitionAction;
-  storyId: string;
-}
+import { resolve } from "node:path";
+import type { StoryOverview, TrellisOverview } from "./context.js";
 
 export interface UsageDelta {
   storyId: string;
@@ -25,50 +21,33 @@ interface PendingUsage extends UsageDelta {
   projectId: string;
 }
 
+interface StorySelection {
+  storyId?: string;
+  ambiguous: boolean;
+}
+
 export class StoryUsageTracker {
-  private activeStoryId: string | undefined;
-  private turnStoryId: string | undefined;
-  private finishAfterTurn: string | undefined;
+  private turnStartOverview: TrellisOverview | undefined;
+  private turnCwd = "";
   private turnOpen = false;
   private turnSubagentTokens = 0;
   private betweenTurnSubagentTokens = 0;
-  private readonly pendingTransitions = new Map<string, TrellisTransition>();
   private readonly seenSubagentRecords = new Set<string>();
 
-  beginTurn(): void {
-    this.closeFinishedStory();
+  constructor(private readonly warn: (message: string) => void = () => {}) {}
+
+  beginTurn(overview?: TrellisOverview, cwd = ""): void {
     this.turnOpen = true;
-    this.turnStoryId = this.activeStoryId;
-    this.finishAfterTurn = undefined;
+    this.turnStartOverview = overview;
+    this.turnCwd = cwd;
     this.turnSubagentTokens = this.betweenTurnSubagentTokens;
     this.betweenTurnSubagentTokens = 0;
   }
 
-  recordTransitionCall(
-    toolCallId: string,
-    toolName: string,
-    input: Record<string, unknown>,
-  ): void {
-    const transition = transitionFromToolCall(toolName, input);
-    if (transition) this.pendingTransitions.set(toolCallId, transition);
-  }
-
-  recordTransitionResult(toolCallId: string, isError: boolean): TrellisTransition | undefined {
-    const transition = this.pendingTransitions.get(toolCallId);
-    this.pendingTransitions.delete(toolCallId);
-    if (!transition || isError) return undefined;
-
-    if (transition.action === "start") {
-      this.activeStoryId = transition.storyId;
-      this.turnStoryId = transition.storyId;
-      return transition;
-    }
-
-    if (this.activeStoryId === transition.storyId) {
-      this.turnStoryId = transition.storyId;
-      this.finishAfterTurn = transition.storyId;
-    }
-    return transition;
+  updateTurnStartOverview(overview: TrellisOverview, cwd: string): void {
+    if (!this.turnOpen) return;
+    this.turnStartOverview = overview;
+    this.turnCwd = cwd;
   }
 
   recordSubagent(record: unknown): void {
@@ -79,41 +58,32 @@ export class StoryUsageTracker {
 
     const tokens = usageTotalTokens(record.usage);
     if (tokens === undefined) return;
-    if (this.turnOpen) {
-      this.turnSubagentTokens += tokens;
-    } else if (this.activeStoryId) {
-      this.betweenTurnSubagentTokens += tokens;
-    }
+    if (this.turnOpen) this.turnSubagentTokens += tokens;
+    else this.betweenTurnSubagentTokens += tokens;
   }
 
-  endTurn(message: unknown): UsageDelta | undefined {
-    const storyId = this.turnStoryId;
+  endTurn(message: unknown, overview?: TrellisOverview, cwd = this.turnCwd): UsageDelta | undefined {
     const main = assistantTotalTokens(message);
     const subagents = this.turnSubagentTokens;
+    const selection = selectTurnStory(this.turnStartOverview, overview, this.turnCwd, cwd);
 
     this.turnOpen = false;
-    this.turnStoryId = undefined;
+    this.turnStartOverview = undefined;
+    this.turnCwd = "";
     this.turnSubagentTokens = 0;
 
-    if (!storyId || (main === 0 && subagents === 0)) return undefined;
-    return { storyId, main, subagents };
-  }
-
-  closeFinishedStory(): void {
-    if (this.finishAfterTurn && this.activeStoryId === this.finishAfterTurn) {
-      this.activeStoryId = undefined;
-    }
-    this.finishAfterTurn = undefined;
+    if (main === 0 && subagents === 0) return undefined;
+    if (selection.ambiguous) this.warn(ambiguousUsageWarning());
+    if (!selection.storyId) return undefined;
+    return { storyId: selection.storyId, main, subagents };
   }
 
   reset(): void {
-    this.activeStoryId = undefined;
-    this.turnStoryId = undefined;
-    this.finishAfterTurn = undefined;
+    this.turnStartOverview = undefined;
+    this.turnCwd = "";
     this.turnOpen = false;
     this.turnSubagentTokens = 0;
     this.betweenTurnSubagentTokens = 0;
-    this.pendingTransitions.clear();
     this.seenSubagentRecords.clear();
   }
 }
@@ -189,23 +159,54 @@ export class UsageDeltaReporter {
   }
 }
 
-export function transitionFromToolCall(
-  toolName: string,
-  input: Record<string, unknown>,
-): TrellisTransition | undefined {
-  if (isDirectTrellisTransition(toolName)) return transitionFromInput(input);
-
-  if (toolName !== "mcp") return undefined;
-  if (input.server !== undefined && input.server !== "trellis") return undefined;
-  if (input.tool !== "transition" && input.tool !== "trellis_transition") return undefined;
-
-  const args = parseArgs(input.args);
-  return args ? transitionFromInput(args) : undefined;
-}
-
 export function assistantTotalTokens(message: unknown): number {
   if (!isRecord(message) || message.role !== "assistant") return 0;
   return usageTotalTokens(message.usage) ?? 0;
+}
+
+function selectTurnStory(
+  startOverview: TrellisOverview | undefined,
+  endOverview: TrellisOverview | undefined,
+  startCwd: string,
+  endCwd: string,
+): StorySelection {
+  const start = selectInProgressStory(startOverview, startCwd);
+  if (start.ambiguous) return start;
+  if (start.storyId && storyStatus(endOverview, start.storyId) === "done") {
+    return { storyId: start.storyId, ambiguous: false };
+  }
+
+  const end = selectInProgressStory(endOverview, endCwd);
+  if (end.storyId) return end;
+  return { ambiguous: start.ambiguous || end.ambiguous };
+}
+
+function selectInProgressStory(overview: TrellisOverview | undefined, cwd: string): StorySelection {
+  const stories = (overview?.stories ?? []).filter(
+    (story): story is StoryOverview & { id: string } =>
+      story.status === "in_progress" && typeof story.id === "string" && story.id.length > 0,
+  );
+  if (stories.length === 0) return { ambiguous: false };
+  if (stories.length === 1) return { storyId: stories[0].id, ambiguous: false };
+
+  const normalizedCwd = normalizePath(cwd);
+  const matches = normalizedCwd
+    ? stories.filter((story) => normalizePath(story.worktree_path ?? story.worktreePath ?? "") === normalizedCwd)
+    : [];
+  if (matches.length === 1) return { storyId: matches[0].id, ambiguous: false };
+  return { ambiguous: true };
+}
+
+function storyStatus(overview: TrellisOverview | undefined, storyId: string): string | undefined {
+  return (overview?.stories ?? []).find((story) => story.id === storyId)?.status;
+}
+
+function normalizePath(path: string): string | undefined {
+  return path.trim().length > 0 ? resolve(path) : undefined;
+}
+
+function ambiguousUsageWarning(): string {
+  return "Token-Usage nicht attribuiert: mehrere in_progress-Storys ohne eindeutigen Worktree-Pfad für ctx.cwd";
 }
 
 function usageTotalTokens(value: unknown): number | undefined {
@@ -214,29 +215,6 @@ function usageTotalTokens(value: unknown): number | undefined {
   return typeof totalTokens === "number" && Number.isSafeInteger(totalTokens) && totalTokens >= 0
     ? totalTokens
     : undefined;
-}
-
-function transitionFromInput(input: Record<string, unknown>): TrellisTransition | undefined {
-  if (input.action !== "start" && input.action !== "finish") return undefined;
-  if (typeof input.story_id !== "string" || input.story_id.length === 0) return undefined;
-  return { action: input.action, storyId: input.story_id };
-}
-
-function isDirectTrellisTransition(toolName: string): boolean {
-  return toolName === "trellis_transition" ||
-    toolName === "mcp__trellis__transition" ||
-    toolName.endsWith(".trellis_transition");
-}
-
-function parseArgs(value: unknown): Record<string, unknown> | undefined {
-  if (isRecord(value)) return value;
-  if (typeof value !== "string") return undefined;
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return isRecord(parsed) ? parsed : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 function usageArguments(
