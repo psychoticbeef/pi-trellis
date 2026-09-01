@@ -184,3 +184,86 @@ describe("UT-22 IT-10 Agent-Erkennung, Ergebniszuordnung und Reset", () => {
     expect(afterReset.reason).toContain(REVIEWERS[0]);
   });
 });
+
+
+describe("UT-36 IT-16 Trellis-Overview-, Agent- und finish-Hooks", () => {
+  it("UT-36 IT-16 zählt fünf proaktive Reviews für eindeutige Trellis-Overview-Story vor erstem finish", async () => {
+    const harness = createPiHarness();
+    createTrellisExtension({
+      readTextFile: async () => "trellis-project: project-1\n",
+      getOverview: async () => ({
+        stories: [
+          { id: "US-16", status: "in_progress", worktree_path: "/repo/us-16" },
+          { id: "US-17", status: "in_progress", worktree_path: "/repo/us-17" },
+        ],
+      }),
+    })(harness.api);
+    const context = harness.context("/repo/us-16");
+    await harness.commands.get("trellis:on")!("", context);
+
+    const calls = REVIEWERS.map((reviewer, index) => ({
+      toolCallId: `proactive-${index}`,
+      toolName: "Agent",
+      input: { subagent_type: reviewer, run_in_background: true },
+    }));
+    await Promise.all(calls.map((call) => harness.toolCall()(call, context)));
+    expect(calls.every((call) => call.input.run_in_background === false)).toBe(true);
+    await Promise.all(calls.map((call) => harness.toolResult()({ ...call, isError: false }, context)));
+
+    await expect(harness.toolCall()({
+      toolCallId: "first-finish",
+      toolName: "trellis_transition",
+      input: { story_id: "US-16", action: "finish" },
+    }, context)).resolves.toBeUndefined();
+  });
+
+  it("UT-36 IT-16 behält proaktive Teilerfolge und nutzt blockbasierten Fallback bei mehrdeutiger Trellis-Overview", async () => {
+    const harness = createPiHarness();
+    createTrellisExtension({
+      readTextFile: async () => "trellis-project: project-1\n",
+      getOverview: async () => ({
+        stories: [
+          { id: "US-16", status: "in_progress", worktree_path: "/repo/a" },
+          { id: "US-17", status: "in_progress", worktree_path: "/repo/b" },
+        ],
+      }),
+    })(harness.api);
+    const context = harness.context("/repo/ambiguous");
+    await harness.commands.get("trellis:on")!("", context);
+
+    const ignored = {
+      toolCallId: "ambiguous-review",
+      toolName: "Agent",
+      input: { subagent_type: REVIEWERS[0], run_in_background: true },
+    };
+    await harness.toolCall()(ignored, context);
+    expect(ignored.input.run_in_background).toBe(true);
+
+    const first = await harness.toolCall()({
+      toolCallId: "blocked-finish",
+      toolName: "trellis_transition",
+      input: { story_id: "US-16", action: "finish" },
+    }, context) as { reason: string };
+    expect(first.reason).toContain(REVIEWERS[0]);
+
+    const fallback = { ...ignored, toolCallId: "fallback-review", input: { ...ignored.input } };
+    await harness.toolCall()(fallback, context);
+    expect(fallback.input.run_in_background).toBe(false);
+    await harness.toolResult()({ ...fallback, isError: false }, context);
+    const second = await harness.toolCall()({
+      toolCallId: "partial-finish",
+      toolName: "trellis_transition",
+      input: { story_id: "US-16", action: "finish" },
+    }, context) as { reason: string };
+    expect(second.reason).not.toContain(`Fehlend: ${REVIEWERS[0]}`);
+    expect(second.reason).toContain(REVIEWERS[1]);
+  });
+  it("UT-36 wahrt Story-Isolation bei freigeschalteter Trellis-Overview-Story und fremdem Block", () => {
+    const gate = new ReviewGate();
+    for (const reviewer of REVIEWERS) gate.recordSuccess("US-16", reviewer);
+    expect(gate.finish("US-17")).toMatchObject({ block: true });
+    expect(gate.storyForReviewSpawn("US-16")).toBeUndefined();
+    expect(gate.missingReviewers("US-17")).toEqual(REVIEWERS);
+  });
+
+});
