@@ -226,3 +226,127 @@ describe("US-14 US-15 Token-Usage pro Story", () => {
     );
   });
 });
+
+const categorizedAssistant = (input: number, output: number, cacheRead: number, cacheWrite: number) => ({
+  role: "assistant",
+  usage: { input, output, cacheRead, cacheWrite, totalTokens: input + output + cacheRead + cacheWrite },
+  content: [],
+});
+
+describe("US-18 Kategorisierte Token-Usage", () => {
+  it("AT-29 IT-18 meldet acht Kategorien aus Haupt-Agent und pi-subagents-Records", async () => {
+    const { harness, context, setOverview } = await setup();
+    await beginTurn(harness, context, 0);
+    harness.emitEvent("subagents:completed", {
+      id: "completed",
+      usage: { input: 11, output: 13, cacheRead: 17, cacheWrite: 19, totalTokens: 60 },
+    });
+    harness.emitEvent("subagents:failed", {
+      id: "failed",
+      usage: { input: 23, output: 29, cacheRead: 31, cacheWrite: 37, totalTokens: 120 },
+    });
+    setOverview(active("US-18"));
+    await harness.turnEnd()({ turnIndex: 0, message: categorizedAssistant(2, 3, 5, 7) }, context);
+
+    await vi.waitFor(() => expect(harness.execCalls).toHaveLength(1));
+    expect(harness.execCalls[0].args).toEqual([
+      "usage", "add", "project-c325", "US-18",
+      "--main-input", "2", "--main-output", "3", "--main-cache-read", "5", "--main-cache-write", "7",
+      "--subagents-input", "34", "--subagents-output", "42",
+      "--subagents-cache-read", "48", "--subagents-cache-write", "56",
+    ]);
+  });
+
+  it("AT-30 IT-18 trennt Kategorien und Legacy ohne Token-Verlust", async () => {
+    const { harness, context, setOverview } = await setup();
+    await beginTurn(harness, context, 0);
+    harness.emitEvent("subagents:completed", { id: "legacy", usage: { totalTokens: 23 } });
+    setOverview(active("US-18"));
+    await harness.turnEnd()({ turnIndex: 0, message: categorizedAssistant(2, 3, 5, 7) }, context);
+
+    await vi.waitFor(() => expect(harness.execCalls).toHaveLength(2));
+    expect(harness.execCalls[0].args).toEqual([
+      "usage", "add", "project-c325", "US-18",
+      "--main-input", "2", "--main-output", "3", "--main-cache-read", "5", "--main-cache-write", "7",
+      "--subagents-input", "0", "--subagents-output", "0",
+      "--subagents-cache-read", "0", "--subagents-cache-write", "0",
+    ]);
+    expect(harness.execCalls[1].args).toEqual([
+      "usage", "add", "project-c325", "US-18", "--main", "0", "--subagents", "23",
+    ]);
+    expect(2 + 3 + 5 + 7 + 23).toBe(40);
+  });
+
+  it("AT-31 IT-18 bestätigt Teilerfolg und wiederholt nur fehlgeschlagenes Legacy-Delta", async () => {
+    const { harness, context, setOverview } = await setup();
+    let call = 0;
+    harness.setExecImplementation(async () => {
+      call += 1;
+      return call === 2
+        ? { stdout: "", stderr: "legacy failed", code: 1, killed: false }
+        : { stdout: "", stderr: "", code: 0, killed: false };
+    });
+
+    await beginTurn(harness, context, 0);
+    harness.emitEvent("subagents:completed", { id: "legacy", usage: { totalTokens: 23 } });
+    setOverview(active("US-18"));
+    await expect(harness.turnEnd()({
+      turnIndex: 0,
+      message: categorizedAssistant(2, 3, 5, 7),
+    }, context)).resolves.toBeUndefined();
+    await vi.waitFor(() => expect(harness.notifications).toContainEqual({
+      message: "Token-Usage für US-18 nicht gemeldet: legacy failed",
+      level: "warning",
+    }));
+
+    await beginTurn(harness, context, 1);
+    await harness.turnEnd()({ turnIndex: 1, message: assistant(0) }, context);
+    await vi.waitFor(() => expect(harness.execCalls).toHaveLength(3));
+    expect(harness.execCalls[2].args).toEqual([
+      "usage", "add", "project-c325", "US-18", "--main", "0", "--subagents", "23",
+    ]);
+  });
+
+  it("AT-32 IT-18 behält Token-Usage-Attribution über Trellis-Overview und Deduplizierung", async () => {
+    const { harness, context, setOverview } = await setup("/work/US-18");
+    const matching = overview(
+      { id: "US-17", status: "in_progress", worktree_path: "/work/US-17" },
+      { id: "US-18", status: "in_progress", worktree_path: "/work/US-18" },
+    );
+
+    await beginTurn(harness, context, 0);
+    const completed = {
+      id: "completed-deduplicated",
+      usage: { input: 11, output: 13, cacheRead: 17, cacheWrite: 19, totalTokens: 60 },
+    };
+    const failed = {
+      id: "failed-deduplicated",
+      usage: { input: 23, output: 29, cacheRead: 31, cacheWrite: 37, totalTokens: 120 },
+    };
+    harness.emitEvent("subagents:completed", completed);
+    harness.emitEvent("subagents:completed", completed);
+    harness.emitEvent("subagents:failed", failed);
+    harness.emitEvent("subagents:failed", failed);
+    setOverview(matching);
+    await harness.turnEnd()({ turnIndex: 0, message: categorizedAssistant(2, 3, 5, 7) }, context);
+    await vi.waitFor(() => expect(harness.execCalls).toHaveLength(1));
+    expect(harness.execCalls[0].args.slice(-8)).toEqual([
+      "--subagents-input", "34", "--subagents-output", "42",
+      "--subagents-cache-read", "48", "--subagents-cache-write", "56",
+    ]);
+
+    await beginTurn(harness, context, 1);
+    await harness.turnEnd()({ turnIndex: 1, message: categorizedAssistant(1, 1, 1, 1) }, context);
+    await vi.waitFor(() => expect(harness.execCalls).toHaveLength(2));
+
+    await beginTurn(harness, context, 2);
+    setOverview(done("US-18"));
+    await harness.turnEnd()({ turnIndex: 2, message: categorizedAssistant(1, 1, 1, 1) }, context);
+    await vi.waitFor(() => expect(harness.execCalls).toHaveLength(3));
+
+    await beginTurn(harness, context, 3);
+    await harness.turnEnd()({ turnIndex: 3, message: categorizedAssistant(1, 1, 1, 1) }, context);
+    await Promise.resolve();
+    expect(harness.execCalls).toHaveLength(3);
+  });
+});
