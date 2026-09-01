@@ -72,6 +72,9 @@ export interface CompactOptions {
 
 export function createPiHarness() {
   const commands = new Map<string, CommandHandler>();
+  const commandRegistrations: string[] = [];
+  const hookRegistrations: string[] = [];
+  const eventSubscriptions: string[] = [];
   const messages: Array<{
     customType?: string;
     content: string;
@@ -99,12 +102,14 @@ export function createPiHarness() {
 
   const api = {
     registerCommand(name: string, options: { handler: CommandHandler }) {
+      commandRegistrations.push(name);
       commands.set(name, options.handler);
     },
     on(
       event: string,
       handler: SessionStartHandler | BeforeAgentStartHandler | ContextHandler | TurnStartHandler | TurnEndHandler | SessionShutdownHandler | AgentSettledHandler | ToolCallHandler | ToolResultHandler,
     ) {
+      hookRegistrations.push(event);
       if (event === "session_start") sessionStart = handler as SessionStartHandler;
       if (event === "before_agent_start") beforeAgentStart = handler as BeforeAgentStartHandler;
       if (event === "context") contextEvent = handler as ContextHandler;
@@ -133,6 +138,7 @@ export function createPiHarness() {
         for (const handler of busHandlers.get(channel) ?? []) handler(data);
       },
       on(channel: string, handler: (data: unknown) => void) {
+        eventSubscriptions.push(channel);
         let handlers = busHandlers.get(channel);
         if (!handlers) {
           handlers = new Set();
@@ -163,6 +169,9 @@ export function createPiHarness() {
   return {
     api,
     commands,
+    commandRegistrations,
+    hookRegistrations,
+    eventSubscriptions,
     messages,
     userMessages,
     notifications,
