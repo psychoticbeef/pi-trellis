@@ -1,6 +1,13 @@
 import { readFile } from "node:fs/promises";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { ensureAgentRecipes } from "./agent-recipes.js";
+import {
+  AutoMode,
+  buildAutoModePrompt,
+  parseAutoModeAction,
+  selectFirstNextStory,
+  shouldCompactContext,
+} from "./auto-mode.js";
 import { CHECK_PROMPT } from "./check-prompt.js";
 import { buildBoardUrl, findTrellisProject, type ReadTextFile, type TrellisProject } from "./config.js";
 import { addWorktreePaths, formatTrellisContext, type TrellisOverview } from "./context.js";
@@ -13,7 +20,11 @@ import {
 } from "./file-hints.js";
 import { INTERVIEW_PROMPT } from "./init-prompt.js";
 import { ONBOARDING_INTERVIEW_PROMPT } from "./onboarding-prompt.js";
-import { TrellisMcpClient, type SpecsForPathResult } from "./mcp-client.js";
+import {
+  TrellisMcpClient,
+  type NextStoryResult,
+  type SpecsForPathResult,
+} from "./mcp-client.js";
 import { buildReviewPrompt } from "./review-prompt.js";
 import {
   finishStoryIdFromToolCall,
@@ -33,6 +44,7 @@ export interface ExtensionDependencies {
     path: string,
     signal?: AbortSignal,
   ) => Promise<SpecsForPathResult>;
+  nextStory?: (projectId: string, signal?: AbortSignal) => Promise<NextStoryResult>;
   ensureAgentRecipes?: (cwd: string) => Promise<void>;
 }
 
@@ -48,6 +60,8 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
     new TrellisMcpClient().getOverview(projectId, signal));
   const specsForPath = dependencies.specsForPath ?? ((projectId, path, signal) =>
     new TrellisMcpClient().specsForPath(projectId, path, signal));
+  const nextStory = dependencies.nextStory ?? ((projectId, signal) =>
+    new TrellisMcpClient().nextStory(projectId, signal));
   const readFileSnapshot = dependencies.readFileSnapshot ?? defaultReadFileSnapshot;
   const provisionAgentRecipes = dependencies.ensureAgentRecipes ?? ensureAgentRecipes;
   const contextReadMaxAgeTurns = parseContextReadMaxAgeTurns(
@@ -67,6 +81,7 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
     }>();
     const hintedStoryIds = new Set<string>();
     const reviewGate = new ReviewGate();
+    const autoMode = new AutoMode();
     const pendingReviews = new Map<string, { storyId: string; reviewer: Reviewer }>();
 
     const emit = (content: string): void => {
@@ -111,8 +126,32 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
       }
     };
 
+    const requestNextStory = async (
+      state: ActiveState,
+      generation: number,
+      ctx: ExtensionContext,
+    ): Promise<void> => {
+      try {
+        const result = await nextStory(state.project.id, ctx.signal);
+        if (active !== state || !autoMode.isQueryCurrent(generation)) return;
+        const story = selectFirstNextStory(result);
+        if (!story) {
+          if (autoMode.finishWithoutStory(generation)) {
+            ctx.ui.notify("Auto-Modus beendet: keine startbaren Stories mehr vorhanden.", "info");
+          }
+          return;
+        }
+        if (!autoMode.acceptStory(generation, story.id)) return;
+        pi.sendUserMessage(buildAutoModePrompt(story));
+      } catch (error) {
+        if (active !== state || !autoMode.fail(generation)) return;
+        ctx.ui.notify(`Auto-Modus gestoppt: ${messageOf(error)}`, "error");
+      }
+    };
+
     pi.on("session_start", async (_event, ctx) => {
       const generation = ++activationGeneration;
+      autoMode.disable();
       statusUpdateGeneration += 1;
       active = undefined;
       disabledForSession = false;
@@ -140,11 +179,36 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
       description: "Trellis-Modus deaktivieren",
       handler: async (_args, ctx) => {
         disabledForSession = true;
+        autoMode.disable();
         activationGeneration += 1;
         statusUpdateGeneration += 1;
         active = undefined;
         ctx.ui.setStatus("trellis", undefined);
         emit("Trellis-Modus deaktiviert.");
+      },
+    });
+
+    pi.registerCommand("trellis:auto", {
+      description: "Auto-Modus für fortlaufende Story-Umsetzung steuern",
+      handler: async (args, ctx) => {
+        const action = parseAutoModeAction(args);
+        if (!action) {
+          emit("Usage: /trellis:auto on|off");
+          return;
+        }
+        if (action === "off") {
+          autoMode.disable();
+          emit("Auto-Modus deaktiviert.");
+          return;
+        }
+        const state = active;
+        if (!state) {
+          emit("/trellis:auto on erfordert einen aktiven Trellis-Modus. Führe zuerst /trellis:on aus.");
+          return;
+        }
+        const generation = autoMode.enable();
+        emit("Auto-Modus aktiviert.");
+        await requestNextStory(state, generation, ctx);
       },
     });
 
@@ -233,6 +297,14 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
     });
 
     pi.on("tool_result", async (event, ctx) => {
+      if (event.isError === false) {
+        const storyId = finishStoryIdFromToolCall(
+          event.toolName,
+          event.input as Record<string, unknown>,
+        );
+        if (storyId) autoMode.recordSuccessfulFinish(storyId);
+      }
+
       const pendingReview = pendingReviews.get(event.toolCallId);
       pendingReviews.delete(event.toolCallId);
       if (pendingReview) {
@@ -278,6 +350,35 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
           { deliverAs: "nextTurn" },
         );
       }
+    });
+
+    pi.on("agent_settled", async (_event, ctx) => {
+      const generation = autoMode.consumeSettled();
+      if (generation === undefined) return;
+      const state = active;
+      if (!state) {
+        autoMode.fail(generation);
+        return;
+      }
+
+      if (shouldCompactContext(ctx.getContextUsage(), ctx.model?.contextWindow)) {
+        if (!autoMode.startCompaction(generation)) return;
+        ctx.compact({
+          customInstructions: "Erhalte abgeschlossene Trellis-Arbeit, aktuelle Story-Entscheidungen und nächste Schritte.",
+          onComplete: () => {
+            if (active !== state || !autoMode.startNextQuery(generation)) return;
+            void requestNextStory(state, generation, ctx);
+          },
+          onError: (error) => {
+            if (active !== state || !autoMode.fail(generation)) return;
+            ctx.ui.notify(`Auto-Modus gestoppt: Compaction fehlgeschlagen: ${error.message}`, "error");
+          },
+        });
+        return;
+      }
+
+      if (!autoMode.startNextQuery(generation)) return;
+      await requestNextStory(state, generation, ctx);
     });
 
     pi.on("context", (event, ctx) => {

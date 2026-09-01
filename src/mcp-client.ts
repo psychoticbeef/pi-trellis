@@ -1,6 +1,9 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface } from "node:readline";
+import type { NextStoryCandidate } from "./auto-mode.js";
 import type { TrellisOverview } from "./context.js";
+
+export type { NextStoryCandidate } from "./auto-mode.js";
 
 const PROTOCOL_VERSION = "2025-03-26";
 
@@ -22,6 +25,10 @@ export interface StoryForPath {
 
 export interface SpecsForPathResult {
   stories: StoryForPath[];
+}
+
+export interface NextStoryResult {
+  candidates: NextStoryCandidate[];
 }
 
 interface JsonRpcResponse {
@@ -57,6 +64,10 @@ export class TrellisMcpClient {
     signal?: AbortSignal,
   ): Promise<SpecsForPathResult> {
     return parseSpecsForPath(await this.callTool(projectId, "specs_for_path", { path }, signal));
+  }
+
+  async nextStory(projectId: string, signal?: AbortSignal): Promise<NextStoryResult> {
+    return parseNextStory(await this.callTool(projectId, "next_story", {}, signal));
   }
 
   private async callTool(
@@ -214,6 +225,27 @@ function parseSpecsForPath(raw: unknown): SpecsForPathResult {
     return { id: candidate.id, title: candidate.title, status: candidate.status };
   });
   return { stories };
+}
+
+function parseNextStory(raw: unknown): NextStoryResult {
+  const value = parseStructuredOrText(raw, "next_story");
+  if (typeof value !== "object" || value === null || !Array.isArray((value as Record<string, unknown>).candidates)) {
+    throw new TrellisMcpError("next_story lieferte keine Kandidatenliste");
+  }
+  const candidates = (value as { candidates: unknown[] }).candidates.map((story, index) => {
+    if (typeof story !== "object" || story === null) {
+      throw new TrellisMcpError(`next_story Kandidat ${index + 1} ist ungültig`);
+    }
+    const candidate = story as Record<string, unknown>;
+    if (
+      typeof candidate.id !== "string" || candidate.id.length === 0 ||
+      typeof candidate.title !== "string" || candidate.title.length === 0
+    ) {
+      throw new TrellisMcpError(`next_story Kandidat ${index + 1} enthält nicht id und title`);
+    }
+    return { id: candidate.id, title: candidate.title };
+  });
+  return { candidates };
 }
 
 function parseStructuredOrText(raw: unknown, toolName: string): unknown {
