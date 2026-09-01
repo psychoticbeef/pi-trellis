@@ -33,6 +33,11 @@ import {
   type Reviewer,
 } from "./review-gate.js";
 import { formatKanbanStatus, formatStatusLine } from "./status.js";
+import {
+  StoryUsageTracker,
+  transitionFromToolCall,
+  UsageDeltaReporter,
+} from "./token-usage.js";
 
 export interface ExtensionDependencies {
   readTextFile?: ReadTextFile;
@@ -83,6 +88,18 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
     const reviewGate = new ReviewGate();
     const autoMode = new AutoMode();
     const pendingReviews = new Map<string, { storyId: string; reviewer: Reviewer }>();
+    const usageTracker = new StoryUsageTracker();
+    let notifyUsageWarning: ((message: string) => void) | undefined;
+    const usageReporter = new UsageDeltaReporter(
+      async (command, args) => pi.exec(command, args, { timeout: 5_000 }),
+      (message) => notifyUsageWarning?.(message),
+    );
+    const stopCompletedUsage = pi.events.on("subagents:completed", (record) => {
+      usageTracker.recordSubagent(record);
+    });
+    const stopFailedUsage = pi.events.on("subagents:failed", (record) => {
+      usageTracker.recordSubagent(record);
+    });
 
     const emit = (content: string): void => {
       pi.sendMessage({ customType: "trellis", content, display: true });
@@ -157,6 +174,8 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
       disabledForSession = false;
       reviewGate.reset();
       pendingReviews.clear();
+      usageTracker.reset();
+      usageReporter.reset();
       hintedStoryIds.clear();
       pendingFileChanges.clear();
       ctx.ui.setStatus("trellis", undefined);
@@ -183,6 +202,7 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
         activationGeneration += 1;
         statusUpdateGeneration += 1;
         active = undefined;
+        usageTracker.reset();
         ctx.ui.setStatus("trellis", undefined);
         emit("Trellis-Modus deaktiviert.");
       },
@@ -261,11 +281,14 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
 
     pi.on("tool_call", async (event, ctx) => {
       const input = event.input as Record<string, unknown>;
-      const finishStoryId = finishStoryIdFromToolCall(event.toolName, input);
-      if (finishStoryId) {
-        const decision = reviewGate.finish(finishStoryId);
+      const transition = transitionFromToolCall(event.toolName, input);
+      if (transition?.action === "finish") {
+        const decision = reviewGate.finish(transition.storyId);
         if (decision.block) return { block: true, reason: decision.reason };
         if (decision.warning) ctx.ui.notify(decision.warning, "warning");
+      }
+      if (transition) {
+        if (active) usageTracker.recordTransitionCall(event.toolCallId, event.toolName, input);
         return;
       }
 
@@ -297,6 +320,7 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
     });
 
     pi.on("tool_result", async (event, ctx) => {
+      usageTracker.recordTransitionResult(event.toolCallId, event.isError !== false);
       if (event.isError === false) {
         const storyId = finishStoryIdFromToolCall(
           event.toolName,
@@ -350,6 +374,18 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
           { deliverAs: "nextTurn" },
         );
       }
+    });
+
+    pi.on("turn_start", async () => {
+      usageTracker.beginTurn();
+    });
+
+    pi.on("session_shutdown", async () => {
+      usageTracker.reset();
+      usageReporter.reset();
+      notifyUsageWarning = undefined;
+      stopCompletedUsage();
+      stopFailedUsage();
     });
 
     pi.on("agent_settled", async (_event, ctx) => {
@@ -419,8 +455,13 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
       return { systemPrompt: `${event.systemPrompt}\n\n${contextBlock}` };
     });
 
-    pi.on("turn_end", async (_event, ctx) => {
+    pi.on("turn_end", async (event, ctx) => {
       const state = active;
+      const usageDelta = usageTracker.endTurn(event.message);
+      if (state && usageDelta) usageReporter.add(state.project.id, usageDelta);
+      notifyUsageWarning = (message) => ctx.ui.notify(message, "warning");
+      usageReporter.flush();
+      usageTracker.closeFinishedStory();
       if (!state) return;
       const updateGeneration = ++statusUpdateGeneration;
       try {
