@@ -19,6 +19,8 @@
 - **US-13** — Auto-Modus für fortlaufende Story-Umsetzung
 - **US-14** — Token-Usage pro Story automatisch melden
 - **US-15** — Overview-basierte Token-Usage-Attribution
+- **US-16** — Review-Gate zählt proaktive Reviews robust
+- **US-17** — Doppel-Load der Extension prozessweit verhindern
 
 ## Glossary
 
@@ -30,6 +32,7 @@
 - **Branch-Gate-Hook** — Hook, der direkte Commits auf develop blockiert.
 - **Context-Hygiene** — Verlustfreie Bereinigung überholter LLM-Kontextinhalte.
 - **Dateihinweis** — Einmal pro Done-Story und Sitzung eingereihter LLM-Kontexthinweis nach einer zugehörigen Dateiänderung.
+- **Doppel-Load** — Mehrfache Aktivierung derselben Extension in einem pi-Prozess.
 - **Drei-Prüfer-Check** — Parallele Prüfung durch drei Qualitätsagenten.
 - **Fail-open** — Warnendes Durchlassen von finish nach drei Blockierungen.
 - **Gate-Rezept** — Stackbezogene CLI-Konfiguration für Lint, Tests und Coverage.
@@ -40,11 +43,14 @@
 - **Onboarding-Prompt** — LLM-Anleitung zur sicheren Trellis-Ersteinrichtung.
 - **pi-Harness** — Test-Doppel der pi-Extension-API.
 - **pi-Package** — Über package.json oder Konventionsverzeichnisse ladbares pi-Ressourcenpaket.
+- **pi-Resource-Rang** — Ladepriorität einer pi-Ressource; niedriger Rang lädt zuerst.
+- **pi-Runtime** — Gemeinsamer Extension-Event-Bus eines laufenden pi-Prozesses.
 - **pi-subagents-Record** — Lifecycle-Event completed oder failed mit Subagent-Usage.
 - **Projekt-Skeleton** — Minimale initiale Datei- und Verzeichnisstruktur.
 - **Reliktsuche** — Read-only Suche nach Code- und Spec-Relikten.
 - **Review-Gate** — Finish-Sperre bis zur Review-Freigabe oder zum Fail-open.
 - **Review-Runde** — Storybezogene Prüfung durch fünf erfolgreiche read-only Agent-Ergebnisse vor finish.
+- **Settings-Extension** — Über .pi/settings.json geladene projektlokale Extension.
 - **Statusline-Eintrag** — Dezente aktuelle Anzeige der laufenden Story und ihrer Gates.
 - **Story-Fenster** — Turns vom erfolgreichen start bis einschließlich erfolgreichen finish einer Story.
 - **Subagent-Rezept** — Markdown-Definition eines spezialisierten Agenten; kanonisch im pi-Package, global installierbar und projektlokal überschreibbar.

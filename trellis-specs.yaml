@@ -24,6 +24,8 @@ glossary:
       definition: Verlustfreie Bereinigung überholter LLM-Kontextinhalte.
     - term: Dateihinweis
       definition: Einmal pro Done-Story und Sitzung eingereihter LLM-Kontexthinweis nach einer zugehörigen Dateiänderung.
+    - term: Doppel-Load
+      definition: Mehrfache Aktivierung derselben Extension in einem pi-Prozess.
     - term: Drei-Prüfer-Check
       definition: Parallele Prüfung durch drei Qualitätsagenten.
     - term: Fail-open
@@ -44,6 +46,10 @@ glossary:
       definition: Test-Doppel der pi-Extension-API.
     - term: pi-Package
       definition: Über package.json oder Konventionsverzeichnisse ladbares pi-Ressourcenpaket.
+    - term: pi-Resource-Rang
+      definition: Ladepriorität einer pi-Ressource; niedriger Rang lädt zuerst.
+    - term: pi-Runtime
+      definition: Gemeinsamer Extension-Event-Bus eines laufenden pi-Prozesses.
     - term: pi-subagents-Record
       definition: Lifecycle-Event completed oder failed mit Subagent-Usage.
     - term: Projekt-Skeleton
@@ -54,6 +60,8 @@ glossary:
       definition: Finish-Sperre bis zur Review-Freigabe oder zum Fail-open.
     - term: Review-Runde
       definition: Storybezogene Prüfung durch fünf erfolgreiche read-only Agent-Ergebnisse vor finish.
+    - term: Settings-Extension
+      definition: Über .pi/settings.json geladene projektlokale Extension.
     - term: Statusline-Eintrag
       definition: Dezente aktuelle Anzeige der laufenden Story und ihrer Gates.
     - term: Story-Fenster
@@ -79,12 +87,12 @@ glossary:
     - term: Änderungsreview
       definition: Read-only Architekturprüfung großer Änderungen.
 counters:
-    AS: 15
-    AT: 25
-    DD: 35
-    IT: 15
-    US: 15
-    UT: 35
+    AS: 17
+    AT: 28
+    DD: 39
+    IT: 17
+    US: 17
+    UT: 39
     ac:US-1: 4
     ac:US-2: 4
     ac:US-3: 4
@@ -100,6 +108,8 @@ counters:
     ac:US-13: 5
     ac:US-14: 7
     ac:US-15: 7
+    ac:US-16: 8
+    ac:US-17: 8
 stories:
     - id: US-1
       kind: story
@@ -1104,13 +1114,16 @@ stories:
     - id: US-10
       kind: story
       title: Review-Gate v2 mit verifizierten Reviews
-      body: Die Review-Runde vor finish verlangt fünf read-only Subagent-Rezepte, bestätigt ihre erfolgreichen Agent-Ergebnisse storybezogen und schützt mit sitzungsgebundener Freischaltung sowie begrenztem Fail-open vor Deadlocks.
+      body: Review-Gate verlangt fünf read-only Subagent-Rezepte, bestätigt erfolgreiche Agent-Ergebnisse storybezogen über eindeutige Trellis-Overview-Zuordnung oder blockbasierten Fallback und schützt mit sitzungsgebundener Freischaltung sowie begrenztem Fail-open vor Deadlocks.
       status: done
       paths:
         - src/index.ts
         - src/review-gate.ts
+        - src/context.ts
+        - src/token-usage.ts
         - test/acceptance-auto-review.test.ts
         - test/acceptance-review-gate-v2.test.ts
+        - test/context.test.ts
         - test/harness.ts
         - test/review-gate.test.ts
       acceptance_criteria:
@@ -1119,13 +1132,13 @@ stories:
           when: finish wird für diese Story aufgerufen.
           then: Das Gate blockiert, bis pre-finish-review, relic-hunter, spec-sync-check, glossary-warden und change-review erfolgreich beobachtet wurden; der erste Block-Text enthält weiterhin die vollständige Anweisung, alle fünf read-only über das Agent-Tool parallel zu starten, und jeder Block nennt die noch fehlenden Reviewer.
         - id: US-10.AC-2
-          given: Die Review-Runde einer Story wurde zuletzt durch finish blockiert.
+          given: Eine Review-Runde ist nicht freigeschaltet.
           when: Das Agent-Tool wird mit einem der fünf Reviewer als subagent_type aufgerufen und liefert danach ein tool_result.
-          then: Der tool_call-Hook ordnet den Spawn dieser Story zu, erzwingt durch Input-Mutation run_in_background=false, und ausschließlich ein zugehöriges Ergebnis mit event.isError=false markiert den Reviewer erfolgreich; Fehler oder fehlende Ergebnisse zählen nicht.
+          then: tool_call ordnet Spawn zuerst einer eindeutig passenden in_progress-Story aus Trellis-Overview und ctx.cwd zu, sonst einer zuletzt geblockten Story; er erzwingt run_in_background=false, und ausschließlich zugehöriges Ergebnis mit event.isError=false markiert Reviewer erfolgreich.
         - id: US-10.AC-3
           given: Mehrere der fünf Reviewer werden als Sibling-Agent-Aufrufe gestartet.
           when: Ihre Inputs werden auf run_in_background=false gesetzt.
-          then: Die Siblings können weiterhin parallel laufen und jedes Ergebnis wird separat der zuletzt geblockten Review-Runde zugeordnet.
+          then: Sibling-Aufrufe können weiterhin parallel laufen und jedes Ergebnis wird separat seiner beim tool_call bestimmten Story zugeordnet.
         - id: US-10.AC-4
           given: Erfolgreiche Reviews wurden für eine Story beobachtet.
           when: finish wird für dieselbe oder eine andere Story aufgerufen.
@@ -1142,21 +1155,21 @@ stories:
           given: Review-Fortschritt, Block-Zähler oder Freischaltungen bestehen in der aktuellen Sitzung.
           when: session_start beginnt eine neue Sitzung.
           then: Sämtlicher Zustand des Review-Gates ist zurückgesetzt.
-      approved_content_hash: 12857458dce5abaf29cf157c7734a093e4c0fd26f869a3ded6bd66498731c9cc
+      approved_content_hash: 404cfde7db1db60008b5621f74652bf4c02a0447c652d1a6c275833336ad2674
       children:
         - id: AS-10
           kind: arch
           title: Verifiziertes sitzungsgebundenes Review-Gate im Extension-Adapter
-          body: src/review-gate.ts kapselt Reviewer-Menge, vollständige parallele Agent-Anweisung, storybezogenen Fortschritt, drei Block-Versuche, dauerhafte Sitzungsfreischaltung und reine Trellis-transition-Erkennung ausschließlich für finish. src/index.ts verbindet synchronen finish-tool_call-Guard mit Agent-tool_call-Input-Mutation und Agent-tool_result-Erfolgskorrelation. Review-Spawns werden Story zugeordnet, deren Review-Runde zuletzt blockiert wurde; nur event.isError=false zählt. session_start leert gesamten Zustand. Betroffene Pfade sind src/review-gate.ts, src/index.ts, test/harness.ts, test/review-gate.test.ts und test/acceptance-review-gate-v2.test.ts.
-          approved_content_hash: 015bceba623ca15be5f413d21e4b5cef61006f99f3cec00db0334f4221e3796d
-          approved_parent_hash: 12857458dce5abaf29cf157c7734a093e4c0fd26f869a3ded6bd66498731c9cc
+          body: src/review-gate.ts kapselt Reviewer-Menge, vollständige parallele Agent-Anweisung, storybezogenen Fortschritt, drei Block-Versuche, dauerhafte Sitzungsfreischaltung und reine Trellis-transition-Erkennung ausschließlich für finish. src/index.ts verbindet synchronen finish-tool_call-Guard mit Agent-tool_call-Input-Mutation und Agent-tool_result-Erfolgskorrelation. Review-Spawns werden zuerst einer eindeutig passenden in_progress-Story aus Trellis-Overview und ctx.cwd zugeordnet; ohne eindeutigen Kandidaten dient zuletzt blockierte Story als Fallback. Nur event.isError=false zählt. session_start leert gesamten Zustand. Betroffene Pfade umfassen src/review-gate.ts, src/index.ts, src/context.ts, src/token-usage.ts, test/harness.ts, test/review-gate.test.ts, test/context.test.ts und test/acceptance-review-gate-v2.test.ts.
+          approved_content_hash: fa85328052df36c9192f8eaa49dcb0e1c292902946620c37597eefefdd5232b7
+          approved_parent_hash: 404cfde7db1db60008b5621f74652bf4c02a0447c652d1a6c275833336ad2674
           children:
             - id: DD-21
               kind: detail_design
               title: Storybezogener Review-Zustand und Fail-open
               body: src/review-gate.ts exportiert die unveränderliche Menge pre-finish-review, relic-hunter, spec-sync-check, glossary-warden und change-review sowie einen zustandsbehafteten ReviewGate-Controller. Ein finish registriert die zuletzt geblockte Story, erhöht höchstens drei Block-Zähler und liefert einen Block-Text mit vollständiger Anweisung, alle fünf read-only via Agent-Tool in einem parallelen Tool-Turn zu starten, plus Liste fehlender Reviewer. Der dritte Text kündigt Fail-open an. Beim vierten unvollständigen finish liefert der Controller eine Warnung ohne Block und schaltet die Story frei. Fünf erfolgreiche Reviewer schalten sie ebenfalls frei. Freigeschaltete Storys bleiben bis reset frei; Review-Fortschritt und Zähler sind storyisoliert.
               approved_content_hash: 7ff7093234071c26f3eff245374149b529418fabcf9f4496fadfab614b8465ea
-              approved_parent_hash: 015bceba623ca15be5f413d21e4b5cef61006f99f3cec00db0334f4221e3796d
+              approved_parent_hash: fa85328052df36c9192f8eaa49dcb0e1c292902946620c37597eefefdd5232b7
               children:
                 - id: UT-21
                   kind: unit_test
@@ -1173,16 +1186,16 @@ stories:
             - id: DD-22
               kind: detail_design
               title: Agent-Hook-Korrelation und Foreground-Mutation
-              body: src/index.ts erkennt tool_call ausschließlich für Tool Agent und einen subagent_type aus der Fünfermenge. Nur wenn zuletzt eine Story durch ihre Review-Runde geblockt wurde, erhält der Spawn eine pending-Zuordnung über toolCallId; event.input.run_in_background wird in-place auf false gesetzt. Der tool_result-Hook entfernt die pending-Zuordnung und meldet ausschließlich bei event.isError=false den Reviewer-Erfolg an den Controller. Fremde Agent-Typen, Agent-Spawns ohne geblockte Story, Fehler und unbekannte Resultate verändern keinen Fortschritt. Bestehende edit/write-tool_result-Verarbeitung bleibt erhalten. session_start leert Controller und Pending-Zuordnungen.
-              approved_content_hash: ecb2ce7978299464ab587a53a4991f4f6b5d598012e60daf3b49eeb7eb44e8c7
-              approved_parent_hash: 015bceba623ca15be5f413d21e4b5cef61006f99f3cec00db0334f4221e3796d
+              body: src/index.ts erkennt tool_call ausschließlich für Tool Agent und einen subagent_type aus der Fünfermenge. Spawn erhält pending-Zuordnung über toolCallId zuerst für eindeutig passende in_progress-Story aus Trellis-Overview und ctx.cwd; ohne eindeutigen Kandidaten dient zuletzt durch Review-Runde geblockte Story als Fallback. event.input.run_in_background wird in-place auf false gesetzt. tool_result entfernt pending-Zuordnung und meldet ausschließlich bei event.isError=false Reviewer-Erfolg an Controller. Fremde Agent-Typen, nicht zuordenbare Spawns, Fehler und unbekannte Resultate verändern keinen Fortschritt. Bestehende edit/write-tool_result-Verarbeitung bleibt erhalten. session_start leert Controller und Pending-Zuordnungen.
+              approved_content_hash: a9904df0710406d39560d8e32eaf7040852f1443be668ab7a30c9039615f2dfd
+              approved_parent_hash: fa85328052df36c9192f8eaa49dcb0e1c292902946620c37597eefefdd5232b7
               children:
                 - id: UT-22
                   kind: unit_test
                   title: Agent-Erkennung, Ergebniszuordnung und Reset
                   body: Harness-Unit-Tests prüfen Agent/subagent_type-Erkennung, erzwungenes run_in_background=false, Zuordnung zur zuletzt geblockten Story, separate Sibling-Ergebnisse, Erfolg nur bei event.isError=false, ignorierte fremde oder unbekannte Calls und vollständigen session_start-Reset. Jeder Testname enthält die ID dieses unit_test.
                   approved_content_hash: 6e8941a1da4281a1c9a6bf7fe7d0e23b45512f387332d23721cd6fb357c26a7b
-                  approved_parent_hash: ecb2ce7978299464ab587a53a4991f4f6b5d598012e60daf3b49eeb7eb44e8c7
+                  approved_parent_hash: a9904df0710406d39560d8e32eaf7040852f1443be668ab7a30c9039615f2dfd
                   evidence:
                     tests:
                         - test/review-gate.test.ts::UT-22 IT-10 Agent-Erkennung, Ergebniszuordnung und Reset > UT-22 IT-10 erzwingt Foreground, korreliert Siblings und zählt nur erfolgreiche Ergebnisse
@@ -1193,7 +1206,7 @@ stories:
               title: finish-, Agent- und Result-Hooks im Pi-Harness
               body: Ein Integrationstest registriert die Extension im Pi-Harness und spielt finish-Blocks, fünf parallele Agent-tool_calls, ihre tool_results, erneutes finish, nachgelagerte Wiederholungen, Story-Wechsel und session_start durch. Er belegt Input-Mutation, Tool-Call-ID-Korrelation, dauerhafte Sitzungsfreischaltung und den dreifachen Deadlock-Schutz. Der Testname enthält die ID dieses integration_test.
               approved_content_hash: b394c19b7cdb0cb6c28e6c8500dce6796e002a62e659fbe925c9455e3da52141
-              approved_parent_hash: 015bceba623ca15be5f413d21e4b5cef61006f99f3cec00db0334f4221e3796d
+              approved_parent_hash: fa85328052df36c9192f8eaa49dcb0e1c292902946620c37597eefefdd5232b7
               evidence:
                 tests:
                     - test/review-gate.test.ts::UT-22 IT-10 Agent-Erkennung, Ergebniszuordnung und Reset > UT-22 IT-10 erzwingt Foreground, korreliert Siblings und zählt nur erfolgreiche Ergebnisse
@@ -1212,7 +1225,7 @@ stories:
             - US-10.AC-6
             - US-10.AC-7
           approved_content_hash: d4486c9c1d6a242e15a9c4cf8a1d2df67fe83d3875e4f8ec8f3d3f70378ab33a
-          approved_parent_hash: 12857458dce5abaf29cf157c7734a093e4c0fd26f869a3ded6bd66498731c9cc
+          approved_parent_hash: 404cfde7db1db60008b5621f74652bf4c02a0447c652d1a6c275833336ad2674
           evidence:
             tests:
                 - test/acceptance-review-gate-v2.test.ts::AT-13 Verifiziertes Review-Gate v2 Ende-zu-Ende > AT-13 erfüllt vollständige Instruktion, Verifikation, Story-Isolation, Fail-open und Sitzungsreset
@@ -1929,3 +1942,262 @@ stories:
                 - test/acceptance-token-usage.test.ts::US-14 US-15 Token-Usage pro Story > AT-21 AT-25 IT-14 IT-15 meldet laufende genaue Usage-Deltas genau einmal
                 - test/acceptance-token-usage.test.ts::US-14 US-15 Token-Usage pro Story > AT-22 AT-25 IT-14 IT-15 warnt bei CLI-Fehler und versucht Usage-Delta erneut
             recorded_at: "2026-09-01T15:20:59Z"
+    - id: US-16
+      kind: story
+      title: Review-Gate zählt proaktive Reviews robust
+      body: Review-Gate ordnet Reviewer-Spawns anhand turn-aktueller Trellis-Overview der passenden in_progress-Story zu. Proaktive Review-Runden zählen als Robustheitsnetz; Trellis-Kontextblock weist zugleich darauf hin, dass ausschließlich finish die Review-Runde anfordern soll. Bestehende Erfolgskorrelation, storybezogene Sitzungsfreischaltung und Fail-open bleiben erhalten.
+      status: done
+      paths:
+        - src/index.ts
+        - src/review-gate.ts
+        - src/context.ts
+        - src/token-usage.ts
+        - test/review-gate.test.ts
+        - test/context.test.ts
+        - test/acceptance-review-gate-v2.test.ts
+        - test/harness.ts
+      acceptance_criteria:
+        - id: US-16.AC-1
+          given: Trellis-Overview zeigt genau eine passende in_progress-Story.
+          when: Einer der fünf Reviewer über das Agent-Tool startet.
+          then: Der Spawn wird dieser Story zugeordnet; Toolnamen, Tool-Inputs und Aufrufformen werden nicht zur Story-Zuordnung geparst, und lastBlockedStoryId ist nicht die alleinige Quelle.
+        - id: US-16.AC-2
+          given: Trellis-Overview zeigt mehrere in_progress-Storys.
+          when: Genau ein Worktree-Pfad dem aktuellen ctx.cwd entspricht.
+          then: Der Spawn wird dieser Story zugeordnet; ohne eindeutige Entsprechung zählt die Review für keine Story.
+        - id: US-16.AC-3
+          given: Ein Reviewer-Spawn wurde einer Story zugeordnet.
+          when: Das zugehörige tool_result eintrifft.
+          then: Der Reviewer zählt ausschließlich bei event.isError=false; Fehler, unbekannte Resultate und fremde Agent-Typen zählen nicht.
+        - id: US-16.AC-4
+          given: Alle fünf Reviewer liefen vor dem ersten finish erfolgreich für eine Story.
+          when: finish erstmals für diese Story erfolgt.
+          then: Review-Gate lässt den Aufruf ohne Block passieren und schaltet die Story für den Rest der Sitzung frei.
+        - id: US-16.AC-5
+          given: Nur eine Teilmenge der fünf Reviewer lief proaktiv erfolgreich für eine Story.
+          when: finish erstmals für diese Story erfolgt.
+          then: Review-Gate blockiert und nennt nur fehlende Reviewer; bereits erfolgreiche Reviews bleiben erhalten.
+        - id: US-16.AC-6
+          given: Trellis-Overview-basierte Zuordnung war nicht möglich und finish blockierte eine Story.
+          when: Nachfolgende Reviewer starten.
+          then: Bestehende blockbasierte Zuordnung funktioniert weiter und Review-Fortschritt bleibt storyisoliert.
+        - id: US-16.AC-7
+          given: Review-Runde bleibt für eine Story unvollständig.
+          when: finish wiederholt wird oder session_start beginnt.
+          then: Die ersten drei finish-Aufrufe blockieren, der vierte passiert mit Warnung und schaltet die Story für die Sitzung frei; session_start setzt gesamten Review-Gate-Zustand zurück.
+        - id: US-16.AC-8
+          given: Eine Story ist in_progress und noch nicht für die Sitzung freigeschaltet.
+          when: Der Trellis-Kontextblock gebaut wird.
+          then: Er enthält einen kurzen Hinweis, Reviews nicht proaktiv zu starten; finish fordert die Review-Runde an.
+      approved_content_hash: cdce449072fc2f2b8ebbd4417ea56781f8d57b5450ef08d83b7c0450d831da42
+      children:
+        - id: AS-16
+          kind: arch
+          title: Trellis-Overview-basierte Reviewer-Zuordnung im sitzungsgebundenen Review-Gate
+          body: 'src/index.ts hält turn-aktuelle Trellis-Overview für Review-Gate-Zuordnung bereit und verbindet Agent-tool_call sowie tool_result mit src/review-gate.ts. Ein Reviewer-Spawn wird zuerst zustandsbasiert einer eindeutig passenden in_progress-Story zugeordnet: genau eine aktive Story direkt, mehrere aktive Storys nur über eindeutige Worktree-Pfad-Entsprechung zu ctx.cwd. Ohne eindeutige Trellis-Overview-Zuordnung bleibt bestehende blockbasierte Zuordnung nach finish verfügbar. src/context.ts ergänzt Trellis-Kontextblock bei einer nicht freigeschalteten in_progress-Story um kurzen Hinweis, Review-Runde erst nach Anforderung durch finish zu starten. Erfolg nur bei event.isError=false, storybezogene Sitzungsfreischaltung, Fail-open und session_start-Reset bleiben erhalten.'
+          approved_content_hash: f47329c9099ef12cdfa348573ed5110dddbc3514e23e9bb5190c04899e047165
+          approved_parent_hash: cdce449072fc2f2b8ebbd4417ea56781f8d57b5450ef08d83b7c0450d831da42
+          children:
+            - id: DD-36
+              kind: detail_design
+              title: Zustandsbasierte Reviewer-Spawn-Zuordnung mit sicherem Fallback
+              body: Extension leitet aus aktueller Trellis-Overview und ctx.cwd eine eindeutige in_progress-Story nach demselben Auswahlmuster wie Token-Usage-Attribution ab. Erkannte Reviewer-Spawns erhalten pending-Zuordnung über toolCallId und run_in_background=false. Ohne eindeutigen Trellis-Overview-Kandidaten darf ausschließlich bestehende zuletzt geblockte Story als Fallback dienen; ohne beide Quellen erfolgt keine Zuordnung. tool_result entfernt pending-Zuordnung und meldet nur event.isError=false. Controller übernimmt proaktive Teilerfolge und lässt erstes finish nach fünf Erfolgen ohne Block passieren.
+              approved_content_hash: 8dfa486aa490683200a7699353e5ce9869ca043d13f3aa322ab9b336f8b3dc45
+              approved_parent_hash: f47329c9099ef12cdfa348573ed5110dddbc3514e23e9bb5190c04899e047165
+              children:
+                - id: UT-36
+                  kind: unit_test
+                  title: Reviewer-Auswahl, Pending-Korrelation und Fallback
+                  body: Unit-Tests prüfen genau eine in_progress-Story, mehrere Storys mit genau einer, keiner und mehreren Worktree-Pfad-Entsprechungen, fehlende Tool-Parsing-Steuerung, run_in_background=false, toolCallId-Korrelation, event.isError=false, proaktive Voll- und Teilerfolge, blockbasierten Fallback und Story-Isolation. Jeder Testname enthält ID dieses unit_test.
+                  approved_content_hash: f6b65c4b94566e4d3652c661ce8414bf7d381f63dc9f4ceafffa49ea816275bd
+                  approved_parent_hash: 8dfa486aa490683200a7699353e5ce9869ca043d13f3aa322ab9b336f8b3dc45
+                  evidence:
+                    tests:
+                        - test/review-gate.test.ts::UT-36 IT-16 Trellis-Overview-, Agent- und finish-Hooks > UT-36 IT-16 zählt fünf proaktive Reviews für eindeutige Trellis-Overview-Story vor erstem finish
+                        - test/review-gate.test.ts::UT-36 IT-16 Trellis-Overview-, Agent- und finish-Hooks > UT-36 IT-16 behält proaktive Teilerfolge und nutzt blockbasierten Fallback bei mehrdeutiger Trellis-Overview
+                        - test/review-gate.test.ts::UT-36 IT-16 Trellis-Overview-, Agent- und finish-Hooks > UT-36 wahrt Story-Isolation bei freigeschalteter Trellis-Overview-Story und fremdem Block
+                    recorded_at: "2026-09-01T17:58:23Z"
+            - id: DD-37
+              kind: detail_design
+              title: Kontext-Hinweis und unveränderte Review-Gate-Semantik
+              body: 'Trellis-Kontextblock erkennt eine in_progress-Story, deren Review-Gate in aktueller Sitzung nicht freigeschaltet ist, und ergänzt knappen Hinweis: Reviews nicht proaktiv starten; finish fordert Review-Runde an. Bereits freigeschaltete Storys erhalten keinen Hinweis. Review-Gate behält fehlende-Reviewer-Text, drei Blocks, warnendes Fail-open beim vierten finish, Story-Isolation und session_start-Reset.'
+              approved_content_hash: 88fd6ee3923ebdcf815681423cc95ebb1f9a7669294c0ff787f732aa2f87de4a
+              approved_parent_hash: f47329c9099ef12cdfa348573ed5110dddbc3514e23e9bb5190c04899e047165
+              children:
+                - id: UT-37
+                  kind: unit_test
+                  title: Kontext-Hinweis, Freischaltung, Fail-open und Reset
+                  body: Unit-Tests prüfen Kontext-Hinweis nur für in_progress-Story ohne Sitzungsfreischaltung, Wegfall nach Freischaltung, erstes finish ohne Block nach fünf Erfolgen, fehlende Reviewer bei Teilfortschritt, drei Blocks, warnendes Fail-open beim vierten finish und session_start-Reset. Jeder Testname enthält ID dieses unit_test.
+                  approved_content_hash: ac6aa521c33e048acfb03ce83482a8da1edb969f404198b97fcc6fad1c18dffa
+                  approved_parent_hash: 88fd6ee3923ebdcf815681423cc95ebb1f9a7669294c0ff787f732aa2f87de4a
+                  evidence:
+                    tests:
+                        - test/context.test.ts::UT-37 Kontext-Hinweis und Freischaltung > UT-37 zeigt Review-Hinweis nur für nicht freigeschaltete in_progress-Story
+                    recorded_at: "2026-09-01T17:58:23Z"
+            - id: IT-16
+              kind: integration_test
+              title: Trellis-Overview-, Agent-, Kontext- und finish-Hooks im pi-Harness
+              body: Integrationstest lädt Extension im pi-Harness, liefert Trellis-Overviews mit einer oder mehreren in_progress-Storys und ctx.cwd, startet proaktive Reviewer-Spawns, korreliert Resultate und prüft erstes finish. Er deckt eindeutige Worktree-Pfad-Auswahl, keine Fehlzuordnung, blockbasierten Fallback, Foreground-Mutation, Erfolgskorrelation, Kontext-Hinweis, Teilfortschritt, Sitzungsfreischaltung, Fail-open und Reset ab. Testname enthält ID dieses integration_test.
+              approved_content_hash: 92322647517a3e4b4000f597c55543c457d7075d991315451cbe19f35ab8b59a
+              approved_parent_hash: f47329c9099ef12cdfa348573ed5110dddbc3514e23e9bb5190c04899e047165
+              evidence:
+                tests:
+                    - test/review-gate.test.ts::UT-36 IT-16 Trellis-Overview-, Agent- und finish-Hooks > UT-36 IT-16 zählt fünf proaktive Reviews für eindeutige Trellis-Overview-Story vor erstem finish
+                    - test/review-gate.test.ts::UT-36 IT-16 Trellis-Overview-, Agent- und finish-Hooks > UT-36 IT-16 behält proaktive Teilerfolge und nutzt blockbasierten Fallback bei mehrdeutiger Trellis-Overview
+                    - test/review-gate.test.ts::UT-36 IT-16 Trellis-Overview-, Agent- und finish-Hooks > UT-36 wahrt Story-Isolation bei freigeschalteter Trellis-Overview-Story und fremdem Block
+                recorded_at: "2026-09-01T17:58:23Z"
+        - id: AT-26
+          kind: acceptance_test
+          title: Proaktive Review-Ergebnisse robust und storybezogen zählen
+          body: Black-box-Suite lädt TypeScript-pi-Extension mit Fake-Trellis-MCP und Hook-Harness. Sie prüft Trellis-Overview-basierte Zuordnung bei einer und mehreren in_progress-Storys, eindeutige Worktree-Pfad-Entsprechung, fehlende Fehlzuordnung, event.isError-Semantik, erstes finish ohne Block nach fünf Erfolgen, nur fehlende Reviewer bei Teilfortschritt, blockbasierten Fallback, Fail-open und session_start-Reset. Testname enthält ID dieses acceptance_test.
+          covers:
+            - US-16.AC-1
+            - US-16.AC-2
+            - US-16.AC-3
+            - US-16.AC-4
+            - US-16.AC-5
+            - US-16.AC-6
+            - US-16.AC-7
+          approved_content_hash: 623d023e45d7f90763e5346e2d02f7ede78308d35a09767b59205289744ce9ef
+          approved_parent_hash: cdce449072fc2f2b8ebbd4417ea56781f8d57b5450ef08d83b7c0450d831da42
+          evidence:
+            tests:
+                - test/acceptance-review-gate-v2.test.ts::AT-26 Proaktive Review-Ergebnisse robust und storybezogen zählen > AT-26 lässt erstes finish nach fünf proaktiven Trellis-Overview-zugeordneten Erfolgen passieren
+                - test/acceptance-review-gate-v2.test.ts::AT-26 Robustheitsnetz für Teilfortschritt, Fallback und Fail-open > AT-26 zählt Teilfortschritt nur bei isError=false und nennt beim ersten finish nur fehlende Reviewer
+                - test/acceptance-review-gate-v2.test.ts::AT-26 Robustheitsnetz für Teilfortschritt, Fallback und Fail-open > AT-26 verwirft mehrdeutige proaktive Zuordnung, nutzt Block-Fallback und behält Fail-open samt Reset
+            recorded_at: "2026-09-01T17:58:23Z"
+        - id: AT-27
+          kind: acceptance_test
+          title: Trellis-Kontextblock verhindert proaktive Review-Runden
+          body: Black-box-Test baut Trellis-Kontextblock für in_progress-Story vor und nach sitzungsgebundener Review-Gate-Freischaltung. Vor Freischaltung erscheint kurzer Hinweis, Reviews nicht proaktiv zu starten und finish als Trigger zu verwenden; danach entfällt Hinweis. Testname enthält ID dieses acceptance_test.
+          covers:
+            - US-16.AC-8
+          approved_content_hash: 787f741c663b099304f6880e54a75e9a47be8d7eba87625be0808c4eb26fac45
+          approved_parent_hash: cdce449072fc2f2b8ebbd4417ea56781f8d57b5450ef08d83b7c0450d831da42
+          evidence:
+            tests:
+                - test/acceptance-review-gate-v2.test.ts::AT-27 Trellis-Kontextblock verhindert proaktive Review-Runden > AT-27 zeigt Hinweis bis zur sitzungsgebundenen Freischaltung
+            recorded_at: "2026-09-01T17:58:23Z"
+    - id: US-17
+      kind: story
+      title: Doppel-Load der Extension prozessweit verhindern
+      body: Extension verhindert Doppel-Load aus Settings-Extension und globalem Git-pi-Package über prozessweiten Symbol.for-Marker auf globalThis. Zuerst geladene Instanz je pi-Runtime gewinnt; jede weitere Aktivierung bleibt No-op mit kurzem UI-Hinweis. Commands, Hooks, Review-Gate und Token-Usage reagieren dadurch exakt einmal.
+      status: done
+      paths:
+        - src/index.ts
+        - README.md
+        - test/harness.ts
+        - test/activation-doppel-load.test.ts
+        - test/acceptance-doppel-load.test.ts
+        - test/readme.test.ts
+      acceptance_criteria:
+        - id: US-17.AC-1
+          given: Erste pi-trellis-Instanz aktiviert sich in einem pi-Prozess.
+          when: Extension-Factory eine ExtensionAPI-Instanz erhält.
+          then: Instanz registriert sich über Symbol.for-Marker auf globalThis als Besitzerin ihrer pi-Runtime.
+        - id: US-17.AC-2
+          given: Prozessweiter Marker enthält bereits Besitzerin für dieselbe pi-Runtime.
+          when: Zweite pi-trellis-Instanz aktiviert wird.
+          then: Aktivierung endet als No-op; keine Commands, Hooks, Event-Abos oder Reporter werden registriert.
+        - id: US-17.AC-3
+          given: Zweite Aktivierung wird wegen Doppel-Load übersprungen.
+          when: No-op erfolgt.
+          then: Kurzer UI-Hinweis meldet bereits aktive pi-trellis-Instanz.
+        - id: US-17.AC-4
+          given: Settings-Extension und globales Git-pi-Package liefern je eine Instanz.
+          when: pi beide lädt.
+          then: Zuerst geladene projektlokale Instanz bleibt funktionsfähig und Commands besitzen keine numerischen Doppel-Load-Suffixe.
+        - id: US-17.AC-5
+          given: Zweite Instanz wurde übersprungen.
+          when: finish, session_start, before_agent_start, turn_end oder Subagent-Lifecycle-Events auftreten.
+          then: Review-Gate, Trellis-Kontextblock und Token-Usage reagieren jeweils exakt einmal.
+        - id: US-17.AC-6
+          given: Mehrere Sessions laufen nacheinander im selben Prozess.
+          when: session_start Review-Gate- und Sitzungszustand zurücksetzt.
+          then: Prozessweiter Marker bleibt bestehen und übersprungene Instanz aktiviert sich nicht nachträglich.
+        - id: US-17.AC-7
+          given: Aktivierungsreihenfolge wird im Test umgekehrt.
+          when: Globale Instanz zuerst aktiviert wird.
+          then: Globale Instanz gewinnt und spätere projektlokale Instanz bleibt No-op; Regel bleibt strikt zuerst geladen gewinnt.
+        - id: US-17.AC-8
+          given: Spec-Baum dokumentiert pi-Ladereihenfolge.
+          when: Architektur und Tests geprüft werden.
+          then: 'Spec nennt belegte Reihenfolge: Settings-Extension vor pi-Package-Ressourcen, basierend auf pi-Resource-Rängen 0 und 4.'
+      approved_content_hash: d36f757eaf28a45f7be19e6d184dc7353c1eb28a23ab932294eed6c9adf44471
+      children:
+        - id: AS-17
+          kind: arch
+          title: Prozessweite Besitzerwahl je pi-Runtime vor Extension-Registrierung
+          body: 'src/index.ts prüft unmittelbar beim Aufruf der Default-Extension über synchrones Probe-Event, ob dieselbe pi-Runtime bereits Besitzerin besitzt. Prozessweite Registry unter Symbol.for auf globalThis hält Besitzerzustände; gemeinsamer Extension-Event-Bus bestimmt pi-Runtime trotz unterschiedlicher ExtensionAPI-Objekte. Erste Instanz fügt Besitzer vor jeder Command-, Hook- oder Reporter-Registrierung hinzu, abonniert Probe-Kanal und delegiert an bestehende Extension; ihr normaler session_start-Hook wird für einmalige UI-Notiz umschlossen. Zweite Instanz emittiert nur Probe, markiert beim Besitzer ausstehende Doppel-Load-Notiz und kehrt ohne Registrierung zurück. Marker überlebt session_start; getrennte pi-Runtimes im selben Prozess bleiben unabhängig. Verifizierte pi-Ladereihenfolge: PackageManager sortiert Settings-Extension mit pi-Resource-Rang 0 vor pi-Package-Ressourcen mit Rang 4; ResourceLoader lädt sortierte Extension-Pfade in dieser Reihenfolge. Damit gewinnt im realen Doppel-Load Settings-Extension, während umgekehrte direkte Aktivierung weiterhin strikt zuerst geladen gewinnt.'
+          approved_content_hash: 9c5010d0646358ea940ccb250f39fc9b03c26d8b03926cbdf049dbde29f51ec9
+          approved_parent_hash: d36f757eaf28a45f7be19e6d184dc7353c1eb28a23ab932294eed6c9adf44471
+          children:
+            - id: DD-38
+              kind: detail_design
+              title: Symbol.for-Registry und frühe No-op-Aktivierung
+              body: 'Globaler Eintrag unter projektspezifischem Symbol.for-Schlüssel enthält Set von Besitzerzuständen. Jede Default-Aktivierung emittiert synchron Probe-Objekt auf internem Event-Kanal. Bestehende Besitzerin derselben pi-Runtime setzt claimed und ausstehende Doppel-Load-Notiz; Aktivierung kehrt ohne eigene Registrierung zurück. Ohne Claim fügt neue Besitzerin sich Registry hinzu, abonniert Probe-Kanal und delegiert an Extension. Besitzerinstanz umschließt ausschließlich bestehenden session_start-Hook: ausstehende Notiz erscheint kurz über ctx.ui.notify und wird danach gelöscht, anschließend läuft ursprünglicher Handler. Keine sitzungsgebundene Reset-Logik verändert Marker. Exportierte createTrellisExtension-Factory bleibt ungeschützt für isolierte Tests und eingebettete Nutzung; pi-Package-Default-Entry bleibt geschützt.'
+              approved_content_hash: d8a49f0ce405a99957bb6dec4075ae46ba473c1d9795046a7bdc088e6d6c0662
+              approved_parent_hash: 9c5010d0646358ea940ccb250f39fc9b03c26d8b03926cbdf049dbde29f51ec9
+              children:
+                - id: UT-38
+                  kind: unit_test
+                  title: Registry-Besitz, No-op und Session-Persistenz
+                  body: Unit-Tests prüfen Symbol.for-Schlüssel, globalThis-Registry, Besitzerzustand vor und nach Doppel-Load, erste Registrierung, zweite No-op-Aktivierung, kurzen UI-Hinweis beim session_start, Marker-Persistenz sowie unabhängige Besitzer für getrennte pi-Runtimes im selben Prozess. Isolierte Tests bereinigen Marker ausdrücklich. Jeder Testname enthält ID dieses unit_test.
+                  approved_content_hash: b3feff4d97bebaec656358ae8fbf3a1b30258b3eef883284636d78357e84773e
+                  approved_parent_hash: d8a49f0ce405a99957bb6dec4075ae46ba473c1d9795046a7bdc088e6d6c0662
+                  evidence:
+                    tests:
+                        - test/activation-doppel-load.test.ts::UT-38 Registry-Besitz, No-op und Session-Persistenz > UT-38 registriert zweite Instanz nicht und zeigt Hinweis einmal beim session_start
+                        - test/activation-doppel-load.test.ts::UT-38 Registry-Besitz, No-op und Session-Persistenz > UT-38 lässt getrennte pi-Runtimes im selben Prozess unabhängig aktivieren
+                        - test/activation-doppel-load.test.ts::UT-38 Registry-Besitz, No-op und Session-Persistenz > UT-38 wahrt strikt zuerst geladen gewinnt bei umgekehrter Aktivierung
+                    recorded_at: "2026-09-01T18:21:02Z"
+            - id: DD-39
+              kind: detail_design
+              title: Exakt-einmal-Verhalten und belegte pi-Ladereihenfolge
+              body: 'Doppel-Load-Test aktiviert dieselbe Extension zweimal an identischer pi-Runtime und prüft Command-Menge ohne numerische Suffixe, einmalige Hook-Ausführung, ein Review-Gate, einen Trellis-Kontextblock sowie einmalige Token-Usage. Test mit getrennten pi-Runtimes belegt unabhängige Besitzer; umgekehrte Aufrufreihenfolge belegt zuerst geladen gewinnt. Spec und README halten verifizierte pi-Implementierung fest: Settings-Extension erhält pi-Resource-Rang 0, pi-Package-Ressource Rang 4; aufsteigende Sortierung bestimmt Extension-Ladereihenfolge.'
+              approved_content_hash: bc1d97578f24c38b11e10d0626b31e29df357a5a8fb435971e94348105badddd
+              approved_parent_hash: 9c5010d0646358ea940ccb250f39fc9b03c26d8b03926cbdf049dbde29f51ec9
+              children:
+                - id: UT-39
+                  kind: unit_test
+                  title: Exakt-einmal-Hooks, Reihenfolge und pi-Resource-Ränge
+                  body: Unit-Tests prüfen fehlende Command-Duplikate, einmalige Registrierung sämtlicher relevanter Hooks und Subagent-Event-Abos, einmalige Token-Usage, Review-Gate und Trellis-Kontextblock sowie beide direkten Aktivierungsreihenfolgen. Statischer Belegtest prüft pi-Resource-Rang 0 der Settings-Extension, Rang 4 der pi-Package-Ressource und aufsteigende Sortierung gegen installierte pi-Implementierung. Dokumenttest prüft aktualisierten README-Hinweis zum geschützten Doppel-Load. Jeder Testname enthält ID dieses unit_test.
+                  approved_content_hash: ec3c2551a3688d51f0f0cc47778037d3e5d387350792a11fc7b3d904f4e8fbc0
+                  approved_parent_hash: bc1d97578f24c38b11e10d0626b31e29df357a5a8fb435971e94348105badddd
+                  evidence:
+                    tests:
+                        - test/activation-doppel-load.test.ts::UT-39 IT-17 Exakt-einmal-Hooks und pi-Resource-Ränge > UT-39 IT-17 verarbeitet Trellis-Kontextblock, Review-Gate und Token-Usage aus Subagent- und Turn-Events exakt einmal
+                        - test/activation-doppel-load.test.ts::UT-39 IT-17 Exakt-einmal-Hooks und pi-Resource-Ränge > UT-39 belegt pi-Resource-Rang 0 der Settings-Extension vor Rang 4 des pi-Package
+                        - test/readme.test.ts::UT-8 UT-25 README-Pflichtinhalte > UT-39 dokumentiert geschützten Doppel-Load für Settings-Extension und pi-Package
+                    recorded_at: "2026-09-01T18:21:02Z"
+            - id: IT-17
+              kind: integration_test
+              title: Doppel-Load derselben Extension im pi-Harness
+              body: Integrationstest erzeugt zwei unabhängig erzeugte Default-Extension-Instanzen, aktiviert beide auf derselben pi-Runtime und führt Session-, Kontext-, finish-, Turn- und Subagent-Lifecycle-Events aus. Er prüft einmalige Registrierung und Wirkung, UI-Hinweis, persistierende Besitzerwahl nach session_start sowie unabhängige Aktivierung getrennt getesteter pi-Runtimes. Testname enthält ID dieses integration_test.
+              approved_content_hash: 00ed717eaf709665394874e5ad240fe519f19de3579f90b6df3185b329fe3b9e
+              approved_parent_hash: 9c5010d0646358ea940ccb250f39fc9b03c26d8b03926cbdf049dbde29f51ec9
+              evidence:
+                tests:
+                    - test/activation-doppel-load.test.ts::UT-39 IT-17 Exakt-einmal-Hooks und pi-Resource-Ränge > UT-39 IT-17 verarbeitet Trellis-Kontextblock, Review-Gate und Token-Usage aus Subagent- und Turn-Events exakt einmal
+                    - test/activation-doppel-load.test.ts::UT-39 IT-17 Exakt-einmal-Hooks und pi-Resource-Ränge > UT-39 belegt pi-Resource-Rang 0 der Settings-Extension vor Rang 4 des pi-Package
+                recorded_at: "2026-09-01T18:21:02Z"
+        - id: AT-28
+          kind: acceptance_test
+          title: Doppel-Load bleibt sichtbarer No-op mit erster Instanz als Besitzerin
+          body: Black-box-Suite simuliert Settings-Extension und globale pi-Package-Instanz auf derselben pi-Runtime. Sie prüft projektlokale Erstladung gemäß dokumentierter pi-Resource-Ränge 0 und 4, umgekehrte direkte Reihenfolge, kurze UI-Notiz, fehlende Command-Suffixe, exakt einmalige Hooks, Review-Gate, Trellis-Kontextblock und Token-Usage sowie Marker-Persistenz über session_start. Testname enthält ID dieses acceptance_test.
+          covers:
+            - US-17.AC-1
+            - US-17.AC-2
+            - US-17.AC-3
+            - US-17.AC-4
+            - US-17.AC-5
+            - US-17.AC-6
+            - US-17.AC-7
+            - US-17.AC-8
+          approved_content_hash: 90fe5d0fe5b45700e4f4b54a6b79748f77a0186a1a22c9132a11843857c0848f
+          approved_parent_hash: d36f757eaf28a45f7be19e6d184dc7353c1eb28a23ab932294eed6c9adf44471
+          evidence:
+            tests:
+                - test/acceptance-doppel-load.test.ts::AT-28 Doppel-Load bleibt sichtbarer No-op mit erster Instanz als Besitzerin > AT-28 lässt projektlokale Erstladung allein registrieren und über Sessions aktiv
+                - test/acceptance-doppel-load.test.ts::AT-28 Doppel-Load bleibt sichtbarer No-op mit erster Instanz als Besitzerin > AT-28 lässt bei umgekehrter direkter Reihenfolge globale Instanz gewinnen
+            recorded_at: "2026-09-01T18:21:02Z"
