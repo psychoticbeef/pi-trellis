@@ -17,6 +17,7 @@
 - **US-11** — Subagent-Rezepte global aus Git-Dateien installieren
 - **US-12** — Onboarding-Modus für /trellis:init
 - **US-13** — Auto-Modus für fortlaufende Story-Umsetzung
+- **US-14** — Token-Usage pro Story automatisch melden
 
 ## Glossary
 
@@ -38,14 +39,18 @@
 - **Onboarding-Prompt** — LLM-Anleitung zur sicheren Trellis-Ersteinrichtung.
 - **pi-Harness** — Test-Doppel der pi-Extension-API.
 - **pi-Package** — Über package.json oder Konventionsverzeichnisse ladbares pi-Ressourcenpaket.
+- **pi-subagents-Record** — Lifecycle-Event completed oder failed mit Subagent-Usage.
 - **Projekt-Skeleton** — Minimale initiale Datei- und Verzeichnisstruktur.
 - **Reliktsuche** — Read-only Suche nach Code- und Spec-Relikten.
 - **Review-Gate** — Finish-Sperre bis zur Review-Freigabe oder zum Fail-open.
 - **Review-Runde** — Storybezogene Prüfung durch fünf erfolgreiche read-only Agent-Ergebnisse vor finish.
 - **Statusline-Eintrag** — Dezente aktuelle Anzeige der laufenden Story und ihrer Gates.
+- **Story-Fenster** — Turns vom erfolgreichen start bis einschließlich erfolgreichen finish einer Story.
 - **Subagent-Rezept** — Markdown-Definition eines spezialisierten Agenten; kanonisch im pi-Package, global installierbar und projektlokal überschreibbar.
+- **Token-Usage** — Von pi gemeldete Gesamtzahl verbrauchter Tokens.
 - **Trellis-Kontextblock** — Pro User-Turn injizierte Trellis-Projektübersicht unter 1500 Zeichen.
 - **Trellis-Modus** — Aktivierte Trellis-Kontextinjektion einer pi-Sitzung.
+- **Usage-Delta** — Seit letzter erfolgreicher Meldung neu zugeordnete Token-Usage.
 - **Vorab-Commit** — Vollständiger Projekt-Commit unmittelbar vor trellis init.
 - **Änderungsreview** — Read-only Architekturprüfung großer Änderungen.
 

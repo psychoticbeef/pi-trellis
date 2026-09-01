@@ -44,6 +44,8 @@ glossary:
       definition: Test-Doppel der pi-Extension-API.
     - term: pi-Package
       definition: Über package.json oder Konventionsverzeichnisse ladbares pi-Ressourcenpaket.
+    - term: pi-subagents-Record
+      definition: Lifecycle-Event completed oder failed mit Subagent-Usage.
     - term: Projekt-Skeleton
       definition: Minimale initiale Datei- und Verzeichnisstruktur.
     - term: Reliktsuche
@@ -54,23 +56,29 @@ glossary:
       definition: Storybezogene Prüfung durch fünf erfolgreiche read-only Agent-Ergebnisse vor finish.
     - term: Statusline-Eintrag
       definition: Dezente aktuelle Anzeige der laufenden Story und ihrer Gates.
+    - term: Story-Fenster
+      definition: Turns vom erfolgreichen start bis einschließlich erfolgreichen finish einer Story.
     - term: Subagent-Rezept
       definition: Markdown-Definition eines spezialisierten Agenten; kanonisch im pi-Package, global installierbar und projektlokal überschreibbar.
+    - term: Token-Usage
+      definition: Von pi gemeldete Gesamtzahl verbrauchter Tokens.
     - term: Trellis-Kontextblock
       definition: Pro User-Turn injizierte Trellis-Projektübersicht unter 1500 Zeichen.
     - term: Trellis-Modus
       definition: Aktivierte Trellis-Kontextinjektion einer pi-Sitzung.
+    - term: Usage-Delta
+      definition: Seit letzter erfolgreicher Meldung neu zugeordnete Token-Usage.
     - term: Vorab-Commit
       definition: Vollständiger Projekt-Commit unmittelbar vor trellis init.
     - term: Änderungsreview
       definition: Read-only Architekturprüfung großer Änderungen.
 counters:
-    AS: 13
-    AT: 18
-    DD: 30
-    IT: 13
-    US: 13
-    UT: 30
+    AS: 14
+    AT: 22
+    DD: 33
+    IT: 14
+    US: 14
+    UT: 33
     ac:US-1: 4
     ac:US-2: 4
     ac:US-3: 4
@@ -84,6 +92,7 @@ counters:
     ac:US-11: 5
     ac:US-12: 6
     ac:US-13: 5
+    ac:US-14: 6
 stories:
     - id: US-1
       kind: story
@@ -976,6 +985,7 @@ stories:
       paths:
         - src/index.ts
         - src/review-gate.ts
+        - src/token-usage.ts
         - test/acceptance-auto-review.test.ts
         - test/review-gate.test.ts
       acceptance_criteria:
@@ -1084,6 +1094,8 @@ stories:
       paths:
         - src/review-gate.ts
         - src/index.ts
+        - src/token-usage.ts
+        - test/harness.ts
         - test/review-gate.test.ts
         - test/acceptance-auto-review.test.ts
         - test/acceptance-review-gate-v2.test.ts
@@ -1121,8 +1133,8 @@ stories:
         - id: AS-10
           kind: arch
           title: Verifiziertes sitzungsgebundenes Review-Gate im Extension-Adapter
-          body: src/review-gate.ts kapselt Reviewer-Menge, vollständige parallele Agent-Anweisung, storybezogenen Fortschritt, drei Block-Versuche und dauerhafte Sitzungsfreischaltung. src/index.ts verbindet den synchronen finish-tool_call-Guard mit Agent-tool_call-Input-Mutation und Agent-tool_result-Erfolgskorrelation. Review-Spawns werden der Story zugeordnet, deren Review-Runde zuletzt blockiert wurde; nur event.isError=false zählt. session_start leert den gesamten Zustand. Betroffene Pfade sind src/review-gate.ts, src/index.ts, test/harness.ts, test/review-gate.test.ts und test/acceptance-review-gate-v2.test.ts.
-          approved_content_hash: 074702c54b03aa08fe22b5265c68edad0f912f7a4b0ffb241724c0663afcc816
+          body: src/review-gate.ts kapselt Reviewer-Menge, vollständige parallele Agent-Anweisung, storybezogenen Fortschritt, drei Block-Versuche und dauerhafte Sitzungsfreischaltung. src/token-usage.ts kapselt die gemeinsame reine Trellis-transition-Erkennung; src/review-gate.ts exportiert darauf basierend die finish-Erkennung. src/index.ts verbindet den synchronen finish-tool_call-Guard mit Agent-tool_call-Input-Mutation und Agent-tool_result-Erfolgskorrelation. Review-Spawns werden der Story zugeordnet, deren Review-Runde zuletzt blockiert wurde; nur event.isError=false zählt. session_start leert den gesamten Zustand. Betroffene Pfade sind src/review-gate.ts, src/token-usage.ts, src/index.ts, test/harness.ts, test/review-gate.test.ts und test/acceptance-review-gate-v2.test.ts.
+          approved_content_hash: bd5189ca9e5689c4452aefb7f27ff86d3f5bcaefa85d09694b8f97a212e1be9a
           approved_parent_hash: 12857458dce5abaf29cf157c7734a093e4c0fd26f869a3ded6bd66498731c9cc
           children:
             - id: DD-21
@@ -1130,7 +1142,7 @@ stories:
               title: Storybezogener Review-Zustand und Fail-open
               body: src/review-gate.ts exportiert die unveränderliche Menge pre-finish-review, relic-hunter, spec-sync-check, glossary-warden und change-review sowie einen zustandsbehafteten ReviewGate-Controller. Ein finish registriert die zuletzt geblockte Story, erhöht höchstens drei Block-Zähler und liefert einen Block-Text mit vollständiger Anweisung, alle fünf read-only via Agent-Tool in einem parallelen Tool-Turn zu starten, plus Liste fehlender Reviewer. Der dritte Text kündigt Fail-open an. Beim vierten unvollständigen finish liefert der Controller eine Warnung ohne Block und schaltet die Story frei. Fünf erfolgreiche Reviewer schalten sie ebenfalls frei. Freigeschaltete Storys bleiben bis reset frei; Review-Fortschritt und Zähler sind storyisoliert.
               approved_content_hash: 7ff7093234071c26f3eff245374149b529418fabcf9f4496fadfab614b8465ea
-              approved_parent_hash: 074702c54b03aa08fe22b5265c68edad0f912f7a4b0ffb241724c0663afcc816
+              approved_parent_hash: bd5189ca9e5689c4452aefb7f27ff86d3f5bcaefa85d09694b8f97a212e1be9a
               children:
                 - id: UT-21
                   kind: unit_test
@@ -1149,7 +1161,7 @@ stories:
               title: Agent-Hook-Korrelation und Foreground-Mutation
               body: src/index.ts erkennt tool_call ausschließlich für Tool Agent und einen subagent_type aus der Fünfermenge. Nur wenn zuletzt eine Story durch ihre Review-Runde geblockt wurde, erhält der Spawn eine pending-Zuordnung über toolCallId; event.input.run_in_background wird in-place auf false gesetzt. Der tool_result-Hook entfernt die pending-Zuordnung und meldet ausschließlich bei event.isError=false den Reviewer-Erfolg an den Controller. Fremde Agent-Typen, Agent-Spawns ohne geblockte Story, Fehler und unbekannte Resultate verändern keinen Fortschritt. Bestehende edit/write-tool_result-Verarbeitung bleibt erhalten. session_start leert Controller und Pending-Zuordnungen.
               approved_content_hash: ecb2ce7978299464ab587a53a4991f4f6b5d598012e60daf3b49eeb7eb44e8c7
-              approved_parent_hash: 074702c54b03aa08fe22b5265c68edad0f912f7a4b0ffb241724c0663afcc816
+              approved_parent_hash: bd5189ca9e5689c4452aefb7f27ff86d3f5bcaefa85d09694b8f97a212e1be9a
               children:
                 - id: UT-22
                   kind: unit_test
@@ -1167,7 +1179,7 @@ stories:
               title: finish-, Agent- und Result-Hooks im Pi-Harness
               body: Ein Integrationstest registriert die Extension im Pi-Harness und spielt finish-Blocks, fünf parallele Agent-tool_calls, ihre tool_results, erneutes finish, nachgelagerte Wiederholungen, Story-Wechsel und session_start durch. Er belegt Input-Mutation, Tool-Call-ID-Korrelation, dauerhafte Sitzungsfreischaltung und den dreifachen Deadlock-Schutz. Der Testname enthält die ID dieses integration_test.
               approved_content_hash: b394c19b7cdb0cb6c28e6c8500dce6796e002a62e659fbe925c9455e3da52141
-              approved_parent_hash: 074702c54b03aa08fe22b5265c68edad0f912f7a4b0ffb241724c0663afcc816
+              approved_parent_hash: bd5189ca9e5689c4452aefb7f27ff86d3f5bcaefa85d09694b8f97a212e1be9a
               evidence:
                 tests:
                     - test/review-gate.test.ts::UT-22 IT-10 Agent-Erkennung, Ergebniszuordnung und Reset > UT-22 IT-10 erzwingt Foreground, korreliert Siblings und zählt nur erfolgreiche Ergebnisse
@@ -1588,3 +1600,167 @@ stories:
                 - test/auto-mode.test.ts::AT-18 Sicherer Stopp und leere Auswahl > AT-18 entwertet Query-, finish- und Compaction-Fortsetzungen durch off und session_start
                 - test/auto-mode.test.ts::AT-18 Sicherer Stopp und leere Auswahl > AT-18 deaktiviert bei leerer Auswahl und meldet Abschluss
             recorded_at: "2026-09-01T10:30:30Z"
+    - id: US-14
+      kind: story
+      title: Token-Usage pro Story automatisch melden
+      body: TypeScript-pi-Extension erfasst Token-Usage von Haupt-Agent und Subagents während aktiver Stories und meldet laufende Deltas am Turn-Ende fehlertolerant per `trellis usage add`.
+      status: done
+      paths:
+        - README.md
+        - src/index.ts
+        - src/review-gate.ts
+        - src/token-usage.ts
+        - test/harness.ts
+        - test/token-usage.test.ts
+        - test/acceptance-token-usage.test.ts
+      acceptance_criteria:
+        - id: US-14.AC-1
+          given: Turn enthält Assistant-Messages mit Usage-Daten und pi-subagents-Records.
+          when: Extension Turn abschließt.
+          then: Extension summiert Haupt-Agent-Tokens ausschließlich aus Assistant-Usage und Subagent-Tokens ausschließlich aus pi-subagents-Records; LLM liefert oder berechnet keine Werte.
+        - id: US-14.AC-2
+          given: Turn enthält erfolgreiches `transition start` für Story.
+          when: Extension Token-Usage zuordnet.
+          then: Gesamter Start-Turn zählt zur Story; alle folgenden Turns zählen bis einschließlich Turn mit erfolgreichem `transition finish`.
+        - id: US-14.AC-3
+          given: Kein erfolgreich gestartetes, noch nicht erfolgreich beendetes Story-Fenster besteht.
+          when: Turn Token-Usage erzeugt.
+          then: Extension verwirft Verbrauch und meldet ihn keiner Story.
+        - id: US-14.AC-4
+          given: Aktiver Story-Turn erzeugt noch nicht gemeldete Haupt-Agent- oder Subagent-Tokens.
+          when: Turn endet.
+          then: Extension führt `trellis usage add <project-id> <story-id> --main N --subagents N` mit genau diesem Delta aus; `<project-id>` stammt aus `trellis-project` in `AGENTS.md`; Finish-Turn wird vor Schließen des Story-Fensters gemeldet.
+        - id: US-14.AC-5
+          given: Bereits erfolgreich gemeldete Token-Usage bleibt in Session-Daten sichtbar.
+          when: Späterer Turn endet.
+          then: Extension meldet nur neues Delta und sendet erfolgreich gemeldete Tokens nicht erneut.
+        - id: US-14.AC-6
+          given: '`trellis usage add` scheitert, etwa wegen fehlendem Binary oder unbekannter Story.'
+          when: Extension Fehler erhält.
+          then: Extension zeigt UI-Warnung, blockiert Agenten und Story-Workflow nie und behält ungemeldetes Delta für späteren Turn-End-Versuch.
+      approved_content_hash: 5dbc62e7bae8ecb9c44bc90121c7bb7e60494ddda2602954418bd4cd7b9f8ba1
+      children:
+        - id: AS-14
+          kind: arch
+          title: Deterministische Token-Usage-Erfassung im Extension-Adapter
+          body: Die TypeScript-pi-Extension verbindet bestehende Trellis-Tool-Call/Result-Korrelation aus AS-8 und DD-20 mit turn_end und Lifecycle-Events von pi-subagents. Eine reine StoryUsageTracker-Komponente führt das Story-Fenster, summiert AssistantMessage.usage.totalTokens als Haupt-Agent-Token-Usage und usage.totalTokens aus eindeutigen pi-subagents-Records completed oder failed als Subagent-Token-Usage. Erfolgreiche start- und finish-Results bestimmen Zuordnung; gesamter Start- und Finish-Turn zählt. Eine getrennte asynchrone UsageDeltaReporter-Komponente serialisiert `trellis usage add`, nutzt Project-ID aus AGENTS.md, bestätigt Usage-Delta nur bei Exit-Code 0 und behält fehlgeschlagene Deltas. turn_end stößt Meldung ohne Await und ohne Tool-Gate an; Fehler erzeugen ausschließlich UI-Warnung. Extension setzt aktive Zuordnung nach Verarbeitung des Finish-Turns zurück und verwirft neue Token-Usage außerhalb eines Story-Fensters.
+          approved_content_hash: 2de57a9fd68d9d1a7786cad74b73ce281b1fc5003c4cfecd8d11eac7d48584a8
+          approved_parent_hash: 5dbc62e7bae8ecb9c44bc90121c7bb7e60494ddda2602954418bd4cd7b9f8ba1
+          children:
+            - id: DD-31
+              kind: detail_design
+              title: Story-Fenster und Turn-Zuordnung
+              body: src/token-usage.ts exportiert StoryUsageTracker und eine reine Extraktion unterstützter Trellis-transition-Aufrufe für action start und finish. tool_call merkt action und Story-ID über toolCallId; ausschließlich tool_result mit isError=false ändert Story-Fenster. start markiert aktuellen Turn samt gepufferten pi-subagents-Records, finish markiert aktuellen Turn und schließt Story-Fenster erst nach dessen Abrechnung. Turn ohne Story-Fenster verwirft neue Token-Usage. session_start setzt Tracker, Transition-Zuordnungen und Record-Deduplizierung zurück.
+              approved_content_hash: fdd40cfc6edde1a679ac4a5c29354c5a40e047328cd1a6892e8e56fd173239d4
+              approved_parent_hash: 2de57a9fd68d9d1a7786cad74b73ce281b1fc5003c4cfecd8d11eac7d48584a8
+              children:
+                - id: UT-31
+                  kind: unit_test
+                  title: Transition-Erkennung und Story-Fenster
+                  body: Unit-Tests prüfen direkte trellis_transition-Namen sowie unterstützte MCP-Gateway-Eingaben für start und finish, erfolglose Results, fremde Actions und Storys, Zuordnung gesamter Start- und Finish-Turns, Schließen nach Finish-Turn sowie Verwerfen außerhalb des Story-Fensters. Jeder Testname enthält ID dieses unit_test.
+                  approved_content_hash: 0eff9774812a296bdee4d98822e189a1d3f0ad99b6b0100275dd328a907776d1
+                  approved_parent_hash: fdd40cfc6edde1a679ac4a5c29354c5a40e047328cd1a6892e8e56fd173239d4
+                  evidence:
+                    tests:
+                        - test/token-usage.test.ts::UT-31 Transition-Erkennung und Story-Fenster > UT-31 erkennt direkte und MCP-transition-Aufrufe strikt
+                        - test/token-usage.test.ts::UT-31 Transition-Erkennung und Story-Fenster > UT-31 rechnet gesamten Start- und Finish-Turn und verwirft Außen-Turns
+                    recorded_at: "2026-09-01T13:21:46Z"
+            - id: DD-32
+              kind: detail_design
+              title: Usage-Quellen und eindeutige Deltas
+              body: StoryUsageTracker liest Haupt-Agent-Token-Usage ausschließlich aus AssistantMessage.usage.totalTokens am turn_end. pi.events-Listener sammeln pi-subagents-Records aus subagents:completed und subagents:failed, verwenden ausschließlich usage.totalTokens und deduplizieren anhand Record-id; Records ohne gültige nichtnegative Usage zählen null. Tracker erzeugt pro Story und Turn ein Usage-Delta aus Haupt-Agent- und Subagent-Token-Usage. Erfolgreich bestätigte Deltas werden nie erneut erzeugt; neue Deltas bleiben getrennt von bereits laufender Meldung.
+              approved_content_hash: 3506ba157cb16ddbfdf44b8148867b4b075190b394771c934a7e8fa9cb812f18
+              approved_parent_hash: 2de57a9fd68d9d1a7786cad74b73ce281b1fc5003c4cfecd8d11eac7d48584a8
+              children:
+                - id: UT-32
+                  kind: unit_test
+                  title: Assistant- und pi-subagents-Usage
+                  body: Unit-Tests prüfen totalTokens aus AssistantMessage-Usage, completed- und failed-pi-subagents-Records, Record-Deduplizierung, fehlende oder ungültige Usage, getrennte Haupt-Agent-/Subagent-Summen sowie keine erneute Ausgabe bereits bestätigter Token-Usage. Jeder Testname enthält ID dieses unit_test.
+                  approved_content_hash: 86b43f87b8332ce8f79e813fb649ebad37a1239ccf0f9658a1b59d21491d9d93
+                  approved_parent_hash: 3506ba157cb16ddbfdf44b8148867b4b075190b394771c934a7e8fa9cb812f18
+                  evidence:
+                    tests:
+                        - test/token-usage.test.ts::UT-32 Haupt-Agent-Token-Usage und Subagent-Token-Usage aus pi-subagents-Records > UT-32 liest ausschließlich gültige totalTokens und dedupliziert pi-subagents-Records
+                        - test/token-usage.test.ts::UT-32 Haupt-Agent-Token-Usage und Subagent-Token-Usage aus pi-subagents-Records > UT-32 sendet erfolgreich bestätigte Token-Usage nicht erneut
+                    recorded_at: "2026-09-01T13:21:46Z"
+            - id: DD-33
+              kind: detail_design
+              title: Nicht blockierende CLI-Meldung und Retry
+              body: UsageDeltaReporter erhält Project-ID aus dem vorhandenen TrellisProject, hält pending Haupt-Agent- und Subagent-Token-Usage pro Story und serialisiert Meldungen. flush startet über injizierte Exec-Funktion `trellis usage add <project-id> <story-id> --main N --subagents N` ohne Await im turn_end-Handler. Exit-Code 0 zieht exakt gesendetes Usage-Delta ab; Throw oder anderer Exit-Code behält es und ruft injizierte Warnfunktion auf. Nächster turn_end stößt Retry auch nach geschlossenem Story-Fenster an. Reporter wirft nicht in Agent-Hooks und blockiert weder Tool-Call noch Story-Workflow.
+              approved_content_hash: 7e138312078e9f9181b334e63e3c2acb14e94afb987fcea459f010f8e497f7cc
+              approved_parent_hash: 2de57a9fd68d9d1a7786cad74b73ce281b1fc5003c4cfecd8d11eac7d48584a8
+              children:
+                - id: UT-33
+                  kind: unit_test
+                  title: CLI-Argumente, Serialisierung und Retry
+                  body: Unit-Tests prüfen exakte Argumentliste für trellis usage add, Project-ID und Story-ID, Exit-Code 0, Nicht-Null-Exit, Throw, Erhalt fehlgeschlagener Usage-Deltas, Retry am nächsten turn_end, neue Token-Usage während laufender Meldung, Warnung und nicht wartenden Hook-Rücklauf. Jeder Testname enthält ID dieses unit_test.
+                  approved_content_hash: 03aaa39230a177f24aa7d2b00a17d8232af4bc3d3d8770bb831f210fa372eb03
+                  approved_parent_hash: 7e138312078e9f9181b334e63e3c2acb14e94afb987fcea459f010f8e497f7cc
+                  evidence:
+                    tests:
+                        - test/token-usage.test.ts::UT-33 CLI-Argumente, Serialisierung und Retry > UT-33 sendet exakte Usage-Deltas einmal, serialisiert neue Token-Usage und kehrt ohne Await zurück
+                        - test/token-usage.test.ts::UT-33 CLI-Argumente, Serialisierung und Retry > UT-33 behält fehlgeschlagene Usage-Deltas, warnt und versucht sie später erneut
+                    recorded_at: "2026-09-01T13:21:46Z"
+            - id: IT-14
+              kind: integration_test
+              title: Turn-, Tool-, Event- und CLI-Integration im pi-Harness
+              body: Integration-Test lädt Extension im pi-Harness, aktiviert sie aus AGENTS.md, simuliert start/finish-Tool-Calls und erfolgreiche Results, turn_end mit AssistantMessage-Usage sowie completed/failed-pi-subagents-Records. Er prüft Story-Fenster, exakte trellis-CLI-Aufrufe, asynchronen Hook-Rücklauf, Retry und UI-Warnung. Testname enthält ID dieses integration_test.
+              approved_content_hash: 05784dd7a36a70734ce97221b21beb7af00e1018463a78c43b7959a8d6c61f1a
+              approved_parent_hash: 2de57a9fd68d9d1a7786cad74b73ce281b1fc5003c4cfecd8d11eac7d48584a8
+              evidence:
+                tests:
+                    - test/acceptance-token-usage.test.ts::US-14 Token-Usage pro Story > AT-19 IT-14 trennt Haupt-Agent-Token-Usage und Subagent-Token-Usage aus pi-subagents-Records
+                    - test/acceptance-token-usage.test.ts::US-14 Token-Usage pro Story > AT-20 IT-14 ordnet Start- bis Finish-Turn zu und verwirft Außen-Turns
+                    - test/acceptance-token-usage.test.ts::US-14 Token-Usage pro Story > AT-21 IT-14 meldet laufende genaue Usage-Deltas einschließlich Finish-Turn ohne erneute Sendung
+                    - test/acceptance-token-usage.test.ts::US-14 Token-Usage pro Story > AT-22 IT-14 warnt bei CLI-Fehler, blockiert turn_end nicht und versucht Usage-Delta erneut
+                recorded_at: "2026-09-01T13:21:46Z"
+        - id: AT-19
+          kind: acceptance_test
+          title: Vertrauenswürdige getrennte Usage-Quellen
+          body: Acceptance-Test erzeugt AssistantMessage-Usage und completed/failed-pi-subagents-Records innerhalb eines Story-Fensters. Gemeldete Haupt-Agent- und Subagent-Werte entsprechen ausschließlich jeweiligen totalTokens; Text oder LLM-Ausgaben beeinflussen keine Werte. Testname enthält ID dieses acceptance_test.
+          covers:
+            - US-14.AC-1
+          approved_content_hash: e699e05c93446b989d2611a25997bee9b7918c47bfd78b7c1f05ff26cc3f8462
+          approved_parent_hash: 5dbc62e7bae8ecb9c44bc90121c7bb7e60494ddda2602954418bd4cd7b9f8ba1
+          evidence:
+            tests:
+                - test/acceptance-token-usage.test.ts::US-14 Token-Usage pro Story > AT-19 IT-14 trennt Haupt-Agent-Token-Usage und Subagent-Token-Usage aus pi-subagents-Records
+            recorded_at: "2026-09-01T13:21:46Z"
+        - id: AT-20
+          kind: acceptance_test
+          title: Start-, Finish- und Außen-Turns zuordnen
+          body: Acceptance-Test erzeugt Token-Usage vor start, im erfolgreichen Start-Turn, in Folgeturns, im erfolgreichen Finish-Turn und danach. Nur Start-Turn bis einschließlich Finish-Turn wird Story zugeordnet; Außen-Turns werden verworfen. Testname enthält ID dieses acceptance_test.
+          covers:
+            - US-14.AC-2
+            - US-14.AC-3
+          approved_content_hash: 8bf5a1257f37056348f0b0ee6e9d432495cdc405c66bcba7e14b4ec85da47040
+          approved_parent_hash: 5dbc62e7bae8ecb9c44bc90121c7bb7e60494ddda2602954418bd4cd7b9f8ba1
+          evidence:
+            tests:
+                - test/acceptance-token-usage.test.ts::US-14 Token-Usage pro Story > AT-20 IT-14 ordnet Start- bis Finish-Turn zu und verwirft Außen-Turns
+            recorded_at: "2026-09-01T13:21:46Z"
+        - id: AT-21
+          kind: acceptance_test
+          title: Laufende genaue Usage-Deltas melden
+          body: Acceptance-Test beendet mehrere Turns eines Story-Fensters und prüft pro Turn exakte nicht erneut gesendete Usage-Deltas über `trellis usage add` mit Project-ID aus AGENTS.md und Story-ID. Finish-Turn wird gemeldet, bevor Story-Fenster geschlossen wird. Testname enthält ID dieses acceptance_test.
+          covers:
+            - US-14.AC-4
+            - US-14.AC-5
+          approved_content_hash: 4165329d1d1f4c161d6f46bd8d51143c2478ef871db481209fbd60e5852a68ce
+          approved_parent_hash: 5dbc62e7bae8ecb9c44bc90121c7bb7e60494ddda2602954418bd4cd7b9f8ba1
+          evidence:
+            tests:
+                - test/acceptance-token-usage.test.ts::US-14 Token-Usage pro Story > AT-21 IT-14 meldet laufende genaue Usage-Deltas einschließlich Finish-Turn ohne erneute Sendung
+            recorded_at: "2026-09-01T13:21:46Z"
+        - id: AT-22
+          kind: acceptance_test
+          title: CLI-Fehler warnend erneut versuchen
+          body: Acceptance-Test lässt `trellis usage add` zuerst scheitern und danach erfolgreich laufen. Er prüft UI-Warnung, sofortigen nicht blockierten turn_end-Rücklauf, unveränderten Agenten- und Story-Workflow sowie Retry desselben ungemeldeten Usage-Deltas am späteren turn_end. Testname enthält ID dieses acceptance_test.
+          covers:
+            - US-14.AC-6
+          approved_content_hash: 81c4ad53c84d5dc4d07419462582e9f8988bda328c407744278e175127619edf
+          approved_parent_hash: 5dbc62e7bae8ecb9c44bc90121c7bb7e60494ddda2602954418bd4cd7b9f8ba1
+          evidence:
+            tests:
+                - test/acceptance-token-usage.test.ts::US-14 Token-Usage pro Story > AT-22 IT-14 warnt bei CLI-Fehler, blockiert turn_end nicht und versucht Usage-Delta erneut
+            recorded_at: "2026-09-01T13:21:46Z"
