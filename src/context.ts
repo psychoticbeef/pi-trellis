@@ -39,7 +39,14 @@ export function addWorktreePaths(overview: TrellisOverview, projectRoot: string)
   };
 }
 
-export function formatTrellisContext(overview: TrellisOverview): string {
+export interface TrellisContextOptions {
+  isReviewUnlocked?: (storyId: string) => boolean;
+}
+
+export function formatTrellisContext(
+  overview: TrellisOverview,
+  options: TrellisContextOptions = {},
+): string {
   const stories = overview.stories ?? [];
   const counts = new Map<string, number>();
   for (const story of stories) {
@@ -61,6 +68,13 @@ export function formatTrellisContext(overview: TrellisOverview): string {
       return `${compact(story.id || "?")} ${compact(story.title || "-")} worktree=${compact(worktree)}`;
     });
   const stale = (overview.stale_nodes ?? []).map(renderStaleNode);
+  const reviewHint = options.isReviewUnlocked !== undefined && stories.some((story) =>
+    story.status === "in_progress" &&
+    typeof story.id === "string" &&
+    !options.isReviewUnlocked?.(story.id)
+  )
+    ? "Review: Reviews nicht proaktiv starten; finish fordert Review-Runde an."
+    : undefined;
 
   const block = [
     "<trellis-context>",
@@ -68,6 +82,7 @@ export function formatTrellisContext(overview: TrellisOverview): string {
     `Glossar: ${summarize(glossary, 350)}`,
     `Kanban: ${clip(kanban, 160)}`,
     `in_progress: ${summarize(active, 300)}`,
+    ...(reviewHint ? [reviewHint] : []),
     `stale: ${summarize(stale, 200)}`,
     "</trellis-context>",
   ].join("\n");

@@ -59,10 +59,17 @@ export class ReviewGate {
     };
   }
 
-  storyForReviewSpawn(): string | undefined {
+  storyForReviewSpawn(overviewStoryId?: string): string | undefined {
+    if (overviewStoryId) {
+      return this.isUnlocked(overviewStoryId) ? undefined : overviewStoryId;
+    }
     const storyId = this.lastBlockedStoryId;
-    if (!storyId || this.state(storyId).unlocked) return undefined;
+    if (!storyId || this.isUnlocked(storyId)) return undefined;
     return storyId;
+  }
+
+  isUnlocked(storyId: string): boolean {
+    return this.stories.get(storyId)?.unlocked ?? false;
   }
 
   recordSuccess(storyId: string, reviewer: Reviewer): void {

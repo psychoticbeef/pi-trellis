@@ -34,6 +34,7 @@ import {
 } from "./review-gate.js";
 import { formatKanbanStatus, formatStatusLine } from "./status.js";
 import {
+  selectInProgressStory,
   StoryUsageTracker,
   UsageDeltaReporter,
 } from "./token-usage.js";
@@ -292,7 +293,8 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
 
       const reviewer = reviewerFromAgentToolCall(event.toolName, input);
       if (reviewer) {
-        const storyId = reviewGate.storyForReviewSpawn();
+        const overviewStoryId = selectInProgressStory(active?.lastOverview, ctx.cwd).storyId;
+        const storyId = reviewGate.storyForReviewSpawn(overviewStoryId);
         if (!storyId) return;
         input.run_in_background = false;
         pendingReviews.set(event.toolCallId, { storyId, reviewer });
@@ -449,7 +451,9 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
       if (active !== state) return undefined;
       state.lastOverview = overview;
       usageTracker.updateTurnStartOverview(overview, ctx.cwd);
-      const contextBlock = formatTrellisContext(overview);
+      const contextBlock = formatTrellisContext(overview, {
+        isReviewUnlocked: (storyId) => reviewGate.isUnlocked(storyId),
+      });
       return { systemPrompt: `${event.systemPrompt}\n\n${contextBlock}` };
     });
 
