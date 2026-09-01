@@ -119,3 +119,15 @@ describe("UT-2 Trellis-Kontextblock und Off-Grundlagen", () => {
     await expect(pending).resolves.toBeUndefined();
   });
 });
+
+
+describe("UT-37 Kontext-Hinweis und Freischaltung", () => {
+  it("UT-37 zeigt Review-Hinweis nur für nicht freigeschaltete in_progress-Story", () => {
+    const overview = { stories: [{ id: "US-16", status: "in_progress" }] };
+    const locked = formatTrellisContext(overview, { isReviewUnlocked: () => false });
+    const unlocked = formatTrellisContext(overview, { isReviewUnlocked: () => true });
+
+    expect(locked).toContain("Reviews nicht proaktiv starten; finish fordert Review-Runde an.");
+    expect(unlocked).not.toContain("Reviews nicht proaktiv starten");
+  });
+});

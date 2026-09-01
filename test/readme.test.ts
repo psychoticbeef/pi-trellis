@@ -40,4 +40,12 @@ describe("UT-8 UT-25 README-Pflichtinhalte", () => {
       "trellis doctor <project-id>",
     ]) expect(readme).toContain(required);
   });
+  it("UT-39 dokumentiert geschützten Doppel-Load für Settings-Extension und pi-Package", async () => {
+    const readme = await readFile(join(root, "README.md"), "utf8");
+    expect(readme).toContain("Settings-Extension zuerst");
+    expect(readme).toContain("Doppel-Load No-op");
+    expect(readme).toContain("UI-Hinweis");
+    expect(readme).not.toContain("sonst läuft die Extension doppelt");
+  });
+
 });

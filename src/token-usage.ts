@@ -21,7 +21,7 @@ interface PendingUsage extends UsageDelta {
   projectId: string;
 }
 
-interface StorySelection {
+export interface StorySelection {
   storyId?: string;
   ambiguous: boolean;
 }
@@ -181,7 +181,10 @@ function selectTurnStory(
   return { ambiguous: start.ambiguous || end.ambiguous };
 }
 
-function selectInProgressStory(overview: TrellisOverview | undefined, cwd: string): StorySelection {
+export function selectInProgressStory(
+  overview: TrellisOverview | undefined,
+  cwd: string,
+): StorySelection {
   const stories = (overview?.stories ?? []).filter(
     (story): story is StoryOverview & { id: string } =>
       story.status === "in_progress" && typeof story.id === "string" && story.id.length > 0,

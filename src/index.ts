@@ -34,6 +34,7 @@ import {
 } from "./review-gate.js";
 import { formatKanbanStatus, formatStatusLine } from "./status.js";
 import {
+  selectInProgressStory,
   StoryUsageTracker,
   UsageDeltaReporter,
 } from "./token-usage.js";
@@ -292,7 +293,8 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
 
       const reviewer = reviewerFromAgentToolCall(event.toolName, input);
       if (reviewer) {
-        const storyId = reviewGate.storyForReviewSpawn();
+        const overviewStoryId = selectInProgressStory(active?.lastOverview, ctx.cwd).storyId;
+        const storyId = reviewGate.storyForReviewSpawn(overviewStoryId);
         if (!storyId) return;
         input.run_in_background = false;
         pendingReviews.set(event.toolCallId, { storyId, reviewer });
@@ -449,7 +451,9 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
       if (active !== state) return undefined;
       state.lastOverview = overview;
       usageTracker.updateTurnStartOverview(overview, ctx.cwd);
-      const contextBlock = formatTrellisContext(overview);
+      const contextBlock = formatTrellisContext(overview, {
+        isReviewUnlocked: (storyId) => reviewGate.isUnlocked(storyId),
+      });
       return { systemPrompt: `${event.systemPrompt}\n\n${contextBlock}` };
     });
 
@@ -486,7 +490,89 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
   };
 }
 
-export default createTrellisExtension();
+export const TRELLIS_EXTENSION_OWNER_KEY = Symbol.for("pi-trellis:extension-owner");
+const TRELLIS_ACTIVATION_PROBE = "pi-trellis:activation-probe";
+
+interface TrellisExtensionOwner {
+  duplicatePending: boolean;
+}
+
+interface TrellisExtensionRegistry {
+  owners: Set<TrellisExtensionOwner>;
+}
+
+interface TrellisActivationProbe {
+  claimed: boolean;
+}
+
+export function createProcessGuardedTrellisExtension(
+  extension = createTrellisExtension(),
+): (pi: ExtensionAPI) => void {
+  return (pi) => {
+    const registry = trellisExtensionRegistry();
+    const probe: TrellisActivationProbe = { claimed: false };
+    pi.events.emit(TRELLIS_ACTIVATION_PROBE, probe);
+    if (probe.claimed) return;
+
+    const owner: TrellisExtensionOwner = { duplicatePending: false };
+    registry.owners.add(owner);
+    pi.events.on(TRELLIS_ACTIVATION_PROBE, (data) => {
+      if (!isTrellisActivationProbe(data)) return;
+      data.claimed = true;
+      owner.duplicatePending = true;
+    });
+    extension(withDuplicateLoadNotice(pi, owner));
+  };
+}
+
+function trellisExtensionRegistry(): TrellisExtensionRegistry {
+  const globalRegistry = globalThis as typeof globalThis & Record<symbol, unknown>;
+  const existing = globalRegistry[TRELLIS_EXTENSION_OWNER_KEY];
+  if (isTrellisExtensionRegistry(existing)) return existing;
+  const created: TrellisExtensionRegistry = { owners: new Set() };
+  globalRegistry[TRELLIS_EXTENSION_OWNER_KEY] = created;
+  return created;
+}
+
+function isTrellisExtensionRegistry(value: unknown): value is TrellisExtensionRegistry {
+  return typeof value === "object" && value !== null &&
+    "owners" in value && value.owners instanceof Set;
+}
+
+function isTrellisActivationProbe(value: unknown): value is TrellisActivationProbe {
+  return typeof value === "object" && value !== null &&
+    "claimed" in value && typeof value.claimed === "boolean";
+}
+
+function withDuplicateLoadNotice(
+  pi: ExtensionAPI,
+  owner: TrellisExtensionOwner,
+): ExtensionAPI {
+  return new Proxy(pi, {
+    get(target, property, receiver) {
+      if (property !== "on") return Reflect.get(target, property, receiver);
+      const register = target.on.bind(target) as (
+        event: string,
+        handler: (event: unknown, ctx: ExtensionContext) => unknown,
+      ) => void;
+      return (event: string, handler: (event: unknown, ctx: ExtensionContext) => unknown) => {
+        if (event !== "session_start") {
+          register(event, handler);
+          return;
+        }
+        register(event, async (sessionEvent, ctx) => {
+          if (owner.duplicatePending) {
+            owner.duplicatePending = false;
+            ctx.ui.notify("Doppel-Load erkannt; zweite pi-trellis-Instanz übersprungen.", "info");
+          }
+          return handler(sessionEvent, ctx);
+        });
+      };
+    },
+  });
+}
+
+export default createProcessGuardedTrellisExtension();
 
 async function defaultReadFileSnapshot(path: string): Promise<string | undefined> {
   try {
