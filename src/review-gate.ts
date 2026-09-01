@@ -1,5 +1,3 @@
-import { transitionFromToolCall } from "./token-usage.js";
-
 export const REVIEWERS = [
   "pre-finish-review",
   "relic-hunter",
@@ -115,6 +113,45 @@ export function finishStoryIdFromToolCall(
   return transition?.action === "finish" ? transition.storyId : undefined;
 }
 
+function transitionFromToolCall(
+  toolName: string,
+  input: Record<string, unknown>,
+): { action: "start" | "finish"; storyId: string } | undefined {
+  if (isDirectTrellisTransition(toolName)) return transitionFromInput(input);
+
+  if (toolName !== "mcp") return undefined;
+  if (input.server !== undefined && input.server !== "trellis") return undefined;
+  if (input.tool !== "transition" && input.tool !== "trellis_transition") return undefined;
+
+  const args = parseArgs(input.args);
+  return args ? transitionFromInput(args) : undefined;
+}
+
+function transitionFromInput(
+  input: Record<string, unknown>,
+): { action: "start" | "finish"; storyId: string } | undefined {
+  if (input.action !== "start" && input.action !== "finish") return undefined;
+  if (typeof input.story_id !== "string" || input.story_id.length === 0) return undefined;
+  return { action: input.action, storyId: input.story_id };
+}
+
+function isDirectTrellisTransition(toolName: string): boolean {
+  return toolName === "trellis_transition" ||
+    toolName === "mcp__trellis__transition" ||
+    toolName.endsWith(".trellis_transition");
+}
+
+function parseArgs(value: unknown): Record<string, unknown> | undefined {
+  if (isRecord(value)) return value;
+  if (typeof value !== "string") return undefined;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return isRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function reviewGateReason(
   storyId: string,
   missing: readonly Reviewer[] = REVIEWERS,
@@ -128,4 +165,8 @@ export function reviewGateReason(
 
 function isReviewer(value: string): value is Reviewer {
   return (REVIEWERS as readonly string[]).includes(value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

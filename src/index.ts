@@ -35,7 +35,6 @@ import {
 import { formatKanbanStatus, formatStatusLine } from "./status.js";
 import {
   StoryUsageTracker,
-  transitionFromToolCall,
   UsageDeltaReporter,
 } from "./token-usage.js";
 
@@ -88,8 +87,10 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
     const reviewGate = new ReviewGate();
     const autoMode = new AutoMode();
     const pendingReviews = new Map<string, { storyId: string; reviewer: Reviewer }>();
-    const usageTracker = new StoryUsageTracker();
     let notifyUsageWarning: ((message: string) => void) | undefined;
+    const usageTracker = new StoryUsageTracker(
+      (message) => notifyUsageWarning?.(message),
+    );
     const usageReporter = new UsageDeltaReporter(
       async (command, args) => pi.exec(command, args, { timeout: 5_000 }),
       (message) => notifyUsageWarning?.(message),
@@ -281,14 +282,11 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
 
     pi.on("tool_call", async (event, ctx) => {
       const input = event.input as Record<string, unknown>;
-      const transition = transitionFromToolCall(event.toolName, input);
-      if (transition?.action === "finish") {
-        const decision = reviewGate.finish(transition.storyId);
+      const finishStoryId = finishStoryIdFromToolCall(event.toolName, input);
+      if (finishStoryId) {
+        const decision = reviewGate.finish(finishStoryId);
         if (decision.block) return { block: true, reason: decision.reason };
         if (decision.warning) ctx.ui.notify(decision.warning, "warning");
-      }
-      if (transition) {
-        if (active) usageTracker.recordTransitionCall(event.toolCallId, event.toolName, input);
         return;
       }
 
@@ -320,7 +318,6 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
     });
 
     pi.on("tool_result", async (event, ctx) => {
-      usageTracker.recordTransitionResult(event.toolCallId, event.isError !== false);
       if (event.isError === false) {
         const storyId = finishStoryIdFromToolCall(
           event.toolName,
@@ -376,8 +373,8 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
       }
     });
 
-    pi.on("turn_start", async () => {
-      usageTracker.beginTurn();
+    pi.on("turn_start", async (_event, ctx) => {
+      usageTracker.beginTurn(active?.lastOverview, ctx.cwd);
     });
 
     pi.on("session_shutdown", async () => {
@@ -451,31 +448,40 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
       }
       if (active !== state) return undefined;
       state.lastOverview = overview;
+      usageTracker.updateTurnStartOverview(overview, ctx.cwd);
       const contextBlock = formatTrellisContext(overview);
       return { systemPrompt: `${event.systemPrompt}\n\n${contextBlock}` };
     });
 
     pi.on("turn_end", async (event, ctx) => {
       const state = active;
-      const usageDelta = usageTracker.endTurn(event.message);
-      if (state && usageDelta) usageReporter.add(state.project.id, usageDelta);
       notifyUsageWarning = (message) => ctx.ui.notify(message, "warning");
-      usageReporter.flush();
-      usageTracker.closeFinishedStory();
-      if (!state) return;
-      const updateGeneration = ++statusUpdateGeneration;
-      try {
-        const overview = addWorktreePaths(
-          await getOverview(state.project.id, ctx.signal),
-          state.project.root,
-        );
-        if (active !== state || statusUpdateGeneration !== updateGeneration) return;
-        state.lastOverview = overview;
-        ctx.ui.setStatus("trellis", ctx.ui.theme.fg("dim", formatStatusLine(overview)));
-      } catch {
-        if (active !== state || statusUpdateGeneration !== updateGeneration) return;
-        ctx.ui.setStatus("trellis", ctx.ui.theme.fg("error", "trellis: unreachable"));
+      let endOverview: TrellisOverview | undefined;
+
+      if (state) {
+        const updateGeneration = ++statusUpdateGeneration;
+        try {
+          const overview = addWorktreePaths(
+            await getOverview(state.project.id, ctx.signal),
+            state.project.root,
+          );
+          if (active === state && statusUpdateGeneration === updateGeneration) {
+            state.lastOverview = overview;
+            endOverview = overview;
+            ctx.ui.setStatus("trellis", ctx.ui.theme.fg("dim", formatStatusLine(overview)));
+          }
+        } catch {
+          if (active === state && statusUpdateGeneration === updateGeneration) {
+            ctx.ui.setStatus("trellis", ctx.ui.theme.fg("error", "trellis: unreachable"));
+          }
+        }
       }
+
+      const usageDelta = usageTracker.endTurn(event.message, endOverview, ctx.cwd);
+      if (state && active === state && usageDelta) {
+        usageReporter.add(state.project.id, usageDelta);
+      }
+      usageReporter.flush();
     });
   };
 }

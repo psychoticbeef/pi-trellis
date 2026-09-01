@@ -1,15 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import { createTrellisExtension } from "../src/index.js";
-import { REVIEWERS } from "../src/review-gate.js";
 import type { TrellisOverview } from "../src/context.js";
 import { createPiHarness } from "./harness.js";
 
-const overview: TrellisOverview = {
+const overview = (...stories: Array<{ id: string; status: string; worktree_path?: string }>): TrellisOverview => ({
   description: "test",
   glossary: [],
-  stories: [],
+  stories,
   stale_nodes: [],
-};
+});
+
+const empty = overview();
+const active = (id = "US-14", path = "/repo") => overview({ id, status: "in_progress", worktree_path: path });
+const done = (id = "US-14") => overview({ id, status: "done" });
 
 const assistant = (totalTokens: number) => ({
   role: "assistant",
@@ -17,16 +20,23 @@ const assistant = (totalTokens: number) => ({
   content: [],
 });
 
-async function setup() {
+async function setup(cwd = "/repo") {
+  let currentOverview = empty;
   const harness = createPiHarness();
   createTrellisExtension({
     readTextFile: async () => "trellis-project: project-c325\n",
-    getOverview: async () => overview,
+    getOverview: async () => currentOverview,
     ensureAgentRecipes: async () => {},
   })(harness.api);
-  const context = harness.context("/repo");
+  const context = harness.context(cwd);
   await harness.sessionStart()({ reason: "startup" }, context);
-  return { harness, context };
+  return {
+    harness,
+    context,
+    setOverview: (value: TrellisOverview) => {
+      currentOverview = value;
+    },
+  };
 }
 
 async function beginTurn(
@@ -37,51 +47,9 @@ async function beginTurn(
   await harness.turnStart()({ turnIndex, timestamp: turnIndex }, context);
 }
 
-async function startStory(
-  harness: ReturnType<typeof createPiHarness>,
-  context: ReturnType<ReturnType<typeof createPiHarness>["context"]>,
-  id = "start",
-) {
-  const call = {
-    toolCallId: id,
-    toolName: "trellis_transition",
-    input: { story_id: "US-14", action: "start" },
-  };
-  await harness.toolCall()(call, context);
-  await harness.toolResult()({ ...call, isError: false }, context);
-}
-
-async function finishStory(
-  harness: ReturnType<typeof createPiHarness>,
-  context: ReturnType<ReturnType<typeof createPiHarness>["context"]>,
-) {
-  const blocked = {
-    toolCallId: "finish-blocked",
-    toolName: "trellis_transition",
-    input: { story_id: "US-14", action: "finish" },
-  };
-  await expect(harness.toolCall()(blocked, context)).resolves.toMatchObject({ block: true });
-  for (const [index, reviewer] of REVIEWERS.entries()) {
-    const call = {
-      toolCallId: `review-${index}`,
-      toolName: "Agent",
-      input: { subagent_type: reviewer, run_in_background: true },
-    };
-    await harness.toolCall()(call, context);
-    await harness.toolResult()({ ...call, isError: false }, context);
-  }
-  const finish = {
-    toolCallId: "finish-success",
-    toolName: "trellis_transition",
-    input: { story_id: "US-14", action: "finish" },
-  };
-  await harness.toolCall()(finish, context);
-  await harness.toolResult()({ ...finish, isError: false }, context);
-}
-
-describe("US-14 Token-Usage pro Story", () => {
-  it("AT-19 IT-14 trennt Haupt-Agent-Token-Usage und Subagent-Token-Usage aus pi-subagents-Records", async () => {
-    const { harness, context } = await setup();
+describe("US-14 US-15 Token-Usage pro Story", () => {
+  it("AT-19 AT-23 IT-14 IT-15 trennt Usage-Quellen und attribuiert Start-Turn per Overview", async () => {
+    const { harness, context, setOverview } = await setup();
     await beginTurn(harness, context, 0);
     harness.emitEvent("subagents:completed", {
       id: "agent-ok",
@@ -93,7 +61,28 @@ describe("US-14 Token-Usage pro Story", () => {
       usage: { totalTokens: 17 },
       error: "LLM behauptet 17000 Tokens",
     });
-    await startStory(harness, context);
+    await harness.toolCall()({
+      toolCallId: "direct-start",
+      toolName: "trellis_transition",
+      input: { story_id: "US-999", action: "start" },
+    }, context);
+    await harness.toolCall()({
+      toolCallId: "gateway-start",
+      toolName: "mcp",
+      input: {
+        server: "trellis",
+        tool: "transition",
+        args: { story_id: "US-998", action: "start" },
+      },
+    }, context);
+    await harness.toolCall()({
+      toolCallId: "scripted-start",
+      toolName: "mcpScript",
+      input: {
+        code: "await tools.trellis_transition({story_id: 'US-997', action: 'start'})",
+      },
+    }, context);
+    setOverview(active());
     await harness.turnEnd()({
       turnIndex: 0,
       message: {
@@ -110,22 +99,29 @@ describe("US-14 Token-Usage pro Story", () => {
     });
   });
 
-  it("AT-20 IT-14 ordnet Start- bis Finish-Turn zu und verwirft Außen-Turns", async () => {
-    const { harness, context } = await setup();
+  it("AT-20 AT-23 IT-14 IT-15 ordnet Start- bis Finish-Turn per Statuswechsel zu", async () => {
+    const { harness, context, setOverview } = await setup();
 
     await beginTurn(harness, context, 0);
     await harness.turnEnd()({ turnIndex: 0, message: assistant(2) }, context);
     expect(harness.execCalls).toHaveLength(0);
 
     await beginTurn(harness, context, 1);
-    await startStory(harness, context);
+    setOverview(active());
     await harness.turnEnd()({ turnIndex: 1, message: assistant(3) }, context);
 
     await beginTurn(harness, context, 2);
     await harness.turnEnd()({ turnIndex: 2, message: assistant(5) }, context);
 
     await beginTurn(harness, context, 3);
-    await finishStory(harness, context);
+    await harness.toolCall()({
+      toolCallId: "scripted-finish",
+      toolName: "mcpScript",
+      input: {
+        code: "await tools.trellis_transition({story_id: 'US-14', action: 'finish'})",
+      },
+    }, context);
+    setOverview(done());
     await harness.turnEnd()({ turnIndex: 3, message: assistant(7) }, context);
 
     await beginTurn(harness, context, 4);
@@ -135,10 +131,50 @@ describe("US-14 Token-Usage pro Story", () => {
     expect(harness.execCalls.map((call) => call.args[5])).toEqual(["3", "5", "7"]);
   });
 
-  it("AT-21 IT-14 meldet laufende genaue Usage-Deltas einschließlich Finish-Turn ohne erneute Sendung", async () => {
-    const { harness, context } = await setup();
+  it("AT-24 IT-15 wählt mehrere in_progress-Storys nur per eindeutigem ctx.cwd", async () => {
+    const { harness, context, setOverview } = await setup("/work/US-15");
+    const matching = overview(
+      { id: "US-14", status: "in_progress", worktree_path: "/work/US-14" },
+      { id: "US-15", status: "in_progress", worktree_path: "/work/US-15" },
+    );
+
     await beginTurn(harness, context, 0);
-    await startStory(harness, context);
+    setOverview(matching);
+    await harness.turnEnd()({ turnIndex: 0, message: assistant(13) }, context);
+    await vi.waitFor(() => expect(harness.execCalls).toHaveLength(1));
+    expect(harness.execCalls[0].args[3]).toBe("US-15");
+
+    const ambiguous = overview(
+      { id: "US-14", status: "in_progress", worktree_path: "/work/shared" },
+      { id: "US-15", status: "in_progress", worktree_path: "/work/other" },
+    );
+    await beginTurn(harness, context, 1);
+    setOverview(ambiguous);
+    await harness.turnEnd()({ turnIndex: 1, message: assistant(17) }, context);
+
+    await beginTurn(harness, context, 2);
+    setOverview(empty);
+    await harness.turnEnd()({ turnIndex: 2, message: assistant(19) }, context);
+
+    const duplicate = overview(
+      { id: "US-14", status: "in_progress", worktree_path: "/work/US-15" },
+      { id: "US-15", status: "in_progress", worktree_path: "/work/US-15" },
+    );
+    await beginTurn(harness, context, 3);
+    setOverview(duplicate);
+    await harness.turnEnd()({ turnIndex: 3, message: assistant(23) }, context);
+
+    expect(harness.execCalls).toHaveLength(1);
+    expect(harness.notifications).toContainEqual({
+      message: "Token-Usage nicht attribuiert: mehrere in_progress-Storys ohne eindeutigen Worktree-Pfad für ctx.cwd",
+      level: "warning",
+    });
+  });
+
+  it("AT-21 AT-25 IT-14 IT-15 meldet laufende genaue Usage-Deltas genau einmal", async () => {
+    const { harness, context, setOverview } = await setup();
+    await beginTurn(harness, context, 0);
+    setOverview(active());
     await harness.turnEnd()({ turnIndex: 0, message: assistant(19) }, context);
     await vi.waitFor(() => expect(harness.execCalls).toHaveLength(1));
 
@@ -148,7 +184,7 @@ describe("US-14 Token-Usage pro Story", () => {
     await vi.waitFor(() => expect(harness.execCalls).toHaveLength(2));
 
     await beginTurn(harness, context, 2);
-    await finishStory(harness, context);
+    setOverview(done());
     await harness.turnEnd()({ turnIndex: 2, message: assistant(31) }, context);
     await vi.waitFor(() => expect(harness.execCalls).toHaveLength(3));
 
@@ -162,8 +198,8 @@ describe("US-14 Token-Usage pro Story", () => {
     ]);
   });
 
-  it("AT-22 IT-14 warnt bei CLI-Fehler, blockiert turn_end nicht und versucht Usage-Delta erneut", async () => {
-    const { harness, context } = await setup();
+  it("AT-22 AT-25 IT-14 IT-15 warnt bei CLI-Fehler und versucht Usage-Delta erneut", async () => {
+    const { harness, context, setOverview } = await setup();
     let resolveCommand: ((result: { stdout: string; stderr: string; code: number; killed: boolean }) => void) | undefined;
     const pending = new Promise<{ stdout: string; stderr: string; code: number; killed: boolean }>((resolve) => {
       resolveCommand = resolve;
@@ -171,7 +207,7 @@ describe("US-14 Token-Usage pro Story", () => {
     harness.setExecImplementation(() => pending);
 
     await beginTurn(harness, context, 0);
-    await startStory(harness, context);
+    setOverview(active());
     await expect(harness.turnEnd()({ turnIndex: 0, message: assistant(31) }, context)).resolves.toBeUndefined();
     expect(harness.execCalls).toHaveLength(1);
 
@@ -188,10 +224,5 @@ describe("US-14 Token-Usage pro Story", () => {
     expect(harness.execCalls[1].args).toEqual(
       ["usage", "add", "project-c325", "US-14", "--main", "31", "--subagents", "0"],
     );
-    await expect(harness.toolCall()({
-      toolCallId: "unrelated",
-      toolName: "bash",
-      input: { command: "true" },
-    }, context)).resolves.toBeUndefined();
   });
 });
