@@ -16,12 +16,14 @@
 - **US-10** — Review-Gate v2 mit verifizierten Reviews
 - **US-11** — Subagent-Rezepte global aus Git-Dateien installieren
 - **US-12** — Onboarding-Modus für /trellis:init
+- **US-13** — Auto-Modus für fortlaufende Story-Umsetzung
 
 ## Glossary
 
 - **agent-dir** — Basisverzeichnis aus PI_CODING_AGENT_DIR oder ~/.pi/agent.
 - **Aufbewahrungsfenster** — Anzahl abgeschlossener Turns, die externe read-Results vollständig bleiben.
 - **Auto-Load** — Projektlokales automatisches Laden der Extension durch pi.
+- **Auto-Modus** — Sitzungsmodus, der startbare Stories nacheinander bis done bearbeitet.
 - **Board-Adresse** — Konfigurierbare Live-Board-Basisadresse; Standard http://127.0.0.1:7420.
 - **Branch-Gate-Hook** — Hook, der direkte Commits auf develop blockiert.
 - **Context-Hygiene** — Verlustfreie Bereinigung überholter LLM-Kontextinhalte.

@@ -14,6 +14,8 @@ glossary:
       definition: Anzahl abgeschlossener Turns, die externe read-Results vollständig bleiben.
     - term: Auto-Load
       definition: Projektlokales automatisches Laden der Extension durch pi.
+    - term: Auto-Modus
+      definition: Sitzungsmodus, der startbare Stories nacheinander bis done bearbeitet.
     - term: Board-Adresse
       definition: Konfigurierbare Live-Board-Basisadresse; Standard http://127.0.0.1:7420.
     - term: Branch-Gate-Hook
@@ -63,12 +65,12 @@ glossary:
     - term: Änderungsreview
       definition: Read-only Architekturprüfung großer Änderungen.
 counters:
-    AS: 12
-    AT: 15
-    DD: 28
-    IT: 12
-    US: 12
-    UT: 28
+    AS: 13
+    AT: 18
+    DD: 30
+    IT: 13
+    US: 13
+    UT: 30
     ac:US-1: 4
     ac:US-2: 4
     ac:US-3: 4
@@ -81,6 +83,7 @@ counters:
     ac:US-10: 7
     ac:US-11: 5
     ac:US-12: 6
+    ac:US-13: 5
 stories:
     - id: US-1
       kind: story
@@ -1451,3 +1454,137 @@ stories:
                 - test/acceptance-init.test.ts::AT-5 AT-15 Geführtes Onboarding und Projekt-Interview > AT-15 deckt sichere Reihenfolge, Gate-Rezepte, CLI-Grenze und Doctor-Abnahme ab
                 - test/acceptance-init.test.ts::AT-5 AT-15 Geführtes Onboarding und Projekt-Interview > AT-15 dokumentiert Onboarding und manuellen Fallback
             recorded_at: "2026-08-31T12:36:41Z"
+    - id: US-13
+      kind: story
+      title: Auto-Modus für fortlaufende Story-Umsetzung
+      body: Die TypeScript-pi-Extension steuert mit /trellis:auto on und /trellis:auto off einen sitzungsgebundenen Auto-Modus. Er wählt jeweils die nächste startbare Story, beauftragt den Agenten mit ihrer vollständigen Umsetzung und setzt nach erfolgreichem finish fort, bis keine Story mehr startbar ist oder der User ihn deaktiviert.
+      status: done
+      paths:
+        - README.md
+        - src/auto-mode.ts
+        - src/index.ts
+        - src/mcp-client.ts
+        - test/auto-mode.test.ts
+        - test/harness.ts
+        - test/integration-package.test.ts
+      acceptance_criteria:
+        - id: US-13.AC-1
+          given: Der Trellis-Modus ist aktiv, der Auto-Modus ist aus und mindestens eine Story ist startbar.
+          when: Der User /trellis:auto on ausführt.
+          then: Der Auto-Modus fragt trellis_next_story ab, wählt deterministisch die erste gelieferte Story und sendet dem Agenten einen User-Turn mit Story-ID, Titel und Auftrag zur vollständigen Umsetzung über start bis finish.
+        - id: US-13.AC-2
+          given: Der Auto-Modus ist aktiv und die aktuelle Story erreicht ein erfolgreiches trellis_transition mit action=finish.
+          when: Der Agent vollständig zur Ruhe gekommen ist.
+          then: Die Extension prüft die aktuelle Kontextnutzung; bei höchstens 75 Prozent fordert sie direkt die nächste startbare Story an, bei mehr als 75 Prozent startet sie zuerst Compaction und fordert die nächste Story erst nach erfolgreicher Compaction an.
+        - id: US-13.AC-3
+          given: Der Auto-Modus ist aktiv oder eine Fortsetzung nach finish beziehungsweise Compaction steht aus.
+          when: Der User /trellis:auto off ausführt.
+          then: Der Auto-Modus wird sofort deaktiviert, ausstehende Callbacks werden entwertet und kein weiterer automatischer User-Turn wird erzeugt; laufende Story-Umsetzung bleibt unberührt.
+        - id: US-13.AC-4
+          given: Der Auto-Modus sucht die nächste startbare Story.
+          when: trellis_next_story keine Story liefert.
+          then: Der Auto-Modus wird deaktiviert und die UI meldet, dass keine startbaren Stories mehr vorhanden sind.
+        - id: US-13.AC-5
+          given: Der Auto-Modus verarbeitet Aktivierung, Sitzungswechsel oder einen fehlgeschlagenen finish-Aufruf.
+          when: Argumente ungültig sind, kein Trellis-Modus aktiv ist, session_start läuft oder finish fehlschlägt.
+          then: Ungültige Aktivierung wird mit Usage-Hinweis abgelehnt, fehlender Trellis-Modus wird konkret gemeldet, session_start setzt den Auto-Modus zurück und nur erfolgreicher finish löst eine Fortsetzung aus.
+      approved_content_hash: f06604fa9383af922ae3ca177992922a1d10404c4711b0cf511ec7af32277fed
+      children:
+        - id: AS-13
+          kind: arch
+          title: Sitzungsgebundene Auto-Modus-Orchestrierung über pi-Events
+          body: Die bestehende TypeScript-pi-Extension ergänzt einen sitzungsgebundenen Auto-Modus mit Generationenschutz. /trellis:auto on erfordert einen aktiven Trellis-Modus; /trellis:auto off ist jederzeit idempotent ausführbar. Ein Auto-Modus-Port fragt trellis_next_story über den vorhandenen kurzlebigen MCP-Transport ab und erzeugt einen deterministischen Umsetzungsauftrag für die erste gelieferte Story. tool_result erkennt ausschließlich erfolgreiche finish-Aufrufe; agent_settled startet danach die Fortsetzung. ctx.getContextUsage und ctx.model.contextWindow bestimmen Nutzung > 75 Prozent. ctx.compact läuft nicht-blockierend; nur sein erfolgreicher, noch aktueller Callback setzt fort. session_start, off, leere Story-Auswahl und Fehler entwerten ausstehende Arbeit. Der Auto-Modus verändert weder Review-Gate noch laufende Story-Umsetzung.
+          approved_content_hash: 6a54a68947e6d0652a946773744167c936a92e3cb5ede9c02a15eaaa4b080756
+          approved_parent_hash: f06604fa9383af922ae3ca177992922a1d10404c4711b0cf511ec7af32277fed
+          children:
+            - id: DD-29
+              kind: detail_design
+              title: Reiner Auto-Modus-Zustand und Story-Auswahl
+              body: src/auto-mode.ts kapselt Auto-Modus-Zustand, Generationen, pending-finish-Story und laufende Fortsetzung. Reine Helfer validieren on/off-Argumente, wählen aus der normalisierten trellis_next_story-Antwort deterministisch den ersten Kandidaten, erzeugen einen knappen User-Turn mit Story-ID, Titel sowie Auftrag zu start, Implementierung, Tests und finish und berechnen Nutzung als tokens / contextWindow. Fehlende oder ungültige Werte lösen keine Compaction aus. Jeder asynchrone Schritt prüft die Generation erneut, damit off und session_start keine spätere Nachricht zulassen.
+              approved_content_hash: 9b122f9150271e95ffc6fbb47bd129644b24d539f6c95ee7502d6d06a561510c
+              approved_parent_hash: 6a54a68947e6d0652a946773744167c936a92e3cb5ede9c02a15eaaa4b080756
+              children:
+                - id: UT-29
+                  kind: unit_test
+                  title: Auto-Modus-Zustand, Auswahl, Prompt und Schwelle
+                  body: Unit-Tests prüfen Argumentvalidierung, deterministische erste Story, normalisierte leere und fehlerhafte Antworten, exakten Umsetzungsauftrag, Generationenschutz und Schwellenfälle 75 Prozent, knapp darüber, fehlende Usage sowie ungültiges contextWindow. Jeder Testname enthält die ID dieses unit_test.
+                  approved_content_hash: f1abe281449c4cc88bfc997a1d52fde1565a1433f1542283bccd92c50bdb0056
+                  approved_parent_hash: 9b122f9150271e95ffc6fbb47bd129644b24d539f6c95ee7502d6d06a561510c
+                  evidence:
+                    tests:
+                        - test/auto-mode.test.ts::UT-29 Auto-Modus-Zustand, Auswahl, Prompt und Schwelle > UT-29 validiert Argumente, wählt ersten Kandidaten und baut stabilen Auftrag
+                        - test/auto-mode.test.ts::UT-29 Auto-Modus-Zustand, Auswahl, Prompt und Schwelle > UT-29 berechnet Grenze strikt oberhalb 75 Prozent und behandelt ungültige Werte sicher
+                        - test/auto-mode.test.ts::UT-29 Auto-Modus-Zustand, Auswahl, Prompt und Schwelle > UT-29 entwertet alte Generationen und doppelte Fortsetzungen
+                        - test/auto-mode.test.ts::UT-29 Auto-Modus-Zustand, Auswahl, Prompt und Schwelle > UT-29 validiert next_story structuredContent und fehlerhafte Antworten
+                    recorded_at: "2026-09-01T10:30:30Z"
+            - id: DD-30
+              kind: detail_design
+              title: Command-, MCP-, finish- und Compaction-Integration
+              body: src/index.ts registriert /trellis:auto mit on/off-Parsing sowie tool_result und agent_settled. Aktivierung verlangt aktiven Trellis-Modus, setzt Auto-Modus atomar und startet genau eine nächste-Story-Abfrage. src/mcp-client.ts stellt nextStory(projectId, signal) über dasselbe sichere stdio-JSON-RPC-Protokoll bereit. Ein erfolgreiches, vom bestehenden finish-Parser erkanntes Tool-Result markiert Fortsetzung; erst agent_settled konsumiert sie. Bei Nutzung > 75 Prozent ruft der Handler ctx.compact auf und setzt ausschließlich in onComplete fort; onError meldet Fehler ohne automatischen User-Turn. Sonst sendet pi.sendUserMessage direkt. Keine nächste Story deaktiviert den Auto-Modus mit UI-Meldung. session_start und /trellis:auto off setzen Zustand zurück; fehlgeschlagene finish-Results bleiben wirkungslos.
+              approved_content_hash: 6764ea361b99f3787d6ff0d2243e5ec9ec5a74c76a059c2ddbccd11ab86a5db8
+              approved_parent_hash: 6a54a68947e6d0652a946773744167c936a92e3cb5ede9c02a15eaaa4b080756
+              children:
+                - id: UT-30
+                  kind: unit_test
+                  title: Event-Korrelation und entwertete Fortsetzungen
+                  body: Unit-Tests im pi-Harness prüfen erfolgreiche gegenüber fehlgeschlagenen direkten und MCP-Gateway-finish-Results, Verzögerung bis agent_settled, genau eine Fortsetzung, Compaction nur oberhalb 75 Prozent, Fortsetzung nur nach onComplete, onError, off- und session_start-Races sowie unverändertes Review-Gate. Jeder Testname enthält die ID dieses unit_test.
+                  approved_content_hash: 31efec2c4b9570fc702681a5ffcd8e3ffb93db100a733c663f1463c0527ae2a2
+                  approved_parent_hash: 6764ea361b99f3787d6ff0d2243e5ec9ec5a74c76a059c2ddbccd11ab86a5db8
+                  evidence:
+                    tests:
+                        - test/auto-mode.test.ts::UT-30 Event-Korrelation und entwertete Fortsetzungen > UT-30 setzt nur erfolgreich beendete aktive Story nach agent_settled genau einmal fort
+                        - test/auto-mode.test.ts::UT-30 Event-Korrelation und entwertete Fortsetzungen > UT-30 korreliert MCP-Gateway-finish und wartet bei hoher Nutzung auf Compaction
+                        - test/auto-mode.test.ts::UT-30 Event-Korrelation und entwertete Fortsetzungen > UT-30 entwertet onError-, off- und session_start-Races und lässt Review-Gate unverändert
+                    recorded_at: "2026-09-01T10:30:30Z"
+            - id: IT-13
+              kind: integration_test
+              title: Auto-Modus-Schleife im pi-Harness mit MCP-stdio
+              body: Eine Integration-Suite lädt die TypeScript-pi-Extension im pi-Harness, lässt einen Fake-Trellis-MCP-Server get_overview und next_story beantworten und führt /trellis:auto on, tool_result, agent_settled, Compaction-Callbacks, /trellis:auto off und session_start aus. Sie beweist Reihenfolge, genau einen automatischen User-Turn je Iteration, Schwellenentscheidung und Ende ohne startbare Story. Der Testname enthält die ID dieses integration_test.
+              approved_content_hash: 979a997f80ecd9889dc59d6542e587462681be96ad9e28ad97a8293d77a0b282
+              approved_parent_hash: 6a54a68947e6d0652a946773744167c936a92e3cb5ede9c02a15eaaa4b080756
+              evidence:
+                tests:
+                    - test/auto-mode.test.ts::IT-13 Auto-Modus-Schleife mit MCP-stdio > IT-13 verbindet Aktivierung, next_story, finish, agent_settled, Compaction und leeres Ende
+                recorded_at: "2026-09-01T10:30:30Z"
+        - id: AT-16
+          kind: acceptance_test
+          title: Auto-Modus startet nächste Story
+          body: Ein Black-box-Test aktiviert den Trellis-Modus, führt /trellis:auto on aus und lässt next_story mehrere Kandidaten liefern. Genau die erste Story erzeugt einen User-Turn mit ID, Titel und vollständigem Umsetzungsauftrag. Ungültige Argumente und inaktiver Trellis-Modus werden konkret abgelehnt. Der Testname enthält die ID dieses acceptance_test.
+          covers:
+            - US-13.AC-1
+            - US-13.AC-5
+          approved_content_hash: 7393b1f69720ea73d4b2114fac2d575d5a3b81c71afee378d744945de41c52a8
+          approved_parent_hash: f06604fa9383af922ae3ca177992922a1d10404c4711b0cf511ec7af32277fed
+          evidence:
+            tests:
+                - test/auto-mode.test.ts::AT-16 Auto-Modus startet nächste Story > AT-16 aktiviert deterministisch erste Story und lehnt Usage sowie inaktiven Trellis-Modus ab
+            recorded_at: "2026-09-01T10:30:30Z"
+        - id: AT-17
+          kind: acceptance_test
+          title: Fortsetzung nach finish mit bedingter Compaction
+          body: Ein Black-box-Test liefert ein erfolgreiches finish und lässt den Agenten vollständig zur Ruhe kommen. Bei 75 Prozent oder weniger folgt die nächste Story direkt; oberhalb 75 Prozent folgt sie erst nach erfolgreicher Compaction. Fehlgeschlagene finish-Results und Compaction-Fehler erzeugen keinen automatischen User-Turn. Der Testname enthält die ID dieses acceptance_test.
+          covers:
+            - US-13.AC-2
+            - US-13.AC-5
+          approved_content_hash: cea3068a538a1433c62398ae2b52363f63fd21fc53997bc0c97825f63da6231f
+          approved_parent_hash: f06604fa9383af922ae3ca177992922a1d10404c4711b0cf511ec7af32277fed
+          evidence:
+            tests:
+                - test/auto-mode.test.ts::AT-17 Fortsetzung nach finish mit bedingter Compaction > AT-17 setzt bei 75 Prozent direkt und oberhalb erst nach erfolgreicher Compaction fort
+                - test/auto-mode.test.ts::AT-17 Fortsetzung nach finish mit bedingter Compaction > AT-17 erzeugt nach finish- oder Compaction-Fehler keinen automatischen User-Turn
+            recorded_at: "2026-09-01T10:30:30Z"
+        - id: AT-18
+          kind: acceptance_test
+          title: Sicherer Stopp durch off, Sitzungswechsel und leere Auswahl
+          body: Ein Black-box-Test deaktiviert den Auto-Modus während ausstehender Story-Abfrage, nach finish und während Compaction und prüft jeweils, dass kein später automatischer User-Turn entsteht. Eine leere next_story-Antwort deaktiviert den Auto-Modus mit Abschlussmeldung; session_start setzt ihn ebenfalls zurück. Laufende Story-Umsetzung wird nicht abgebrochen. Der Testname enthält die ID dieses acceptance_test.
+          covers:
+            - US-13.AC-3
+            - US-13.AC-4
+            - US-13.AC-5
+          approved_content_hash: 59eba5ecd18e5cdbf26b00a2bc26f8226dd6a6070e5b9aaecb8d28428f91d59c
+          approved_parent_hash: f06604fa9383af922ae3ca177992922a1d10404c4711b0cf511ec7af32277fed
+          evidence:
+            tests:
+                - test/auto-mode.test.ts::AT-18 Sicherer Stopp und leere Auswahl > AT-18 entwertet Query-, finish- und Compaction-Fortsetzungen durch off und session_start
+                - test/auto-mode.test.ts::AT-18 Sicherer Stopp und leere Auswahl > AT-18 deaktiviert bei leerer Auswahl und meldet Abschluss
+            recorded_at: "2026-09-01T10:30:30Z"
