@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import type { TrellisOverview } from "../src/context.js";
 import {
   assistantTotalTokens,
   StoryUsageTracker,
-  transitionFromToolCall,
   UsageDeltaReporter,
   type UsageCommandResult,
 } from "../src/token-usage.js";
@@ -12,84 +12,114 @@ const assistant = (totalTokens: number) => ({
   usage: { totalTokens },
 });
 
-const transition = (toolCallId: string, storyId: string, action: "start" | "finish") => ({
-  toolCallId,
-  toolName: "trellis_transition",
-  input: { story_id: storyId, action },
+const overview = (...stories: Array<{ id: string; status: string; worktree_path?: string }>): TrellisOverview => ({
+  stories,
 });
 
-describe("UT-31 Transition-Erkennung und Story-Fenster", () => {
-  it("UT-31 erkennt direkte und MCP-transition-Aufrufe strikt", () => {
-    expect(transitionFromToolCall("trellis_transition", {
-      story_id: "US-14",
-      action: "start",
-    })).toEqual({ storyId: "US-14", action: "start" });
-    expect(transitionFromToolCall("mcp__trellis__transition", {
-      story_id: "US-14",
-      action: "finish",
-    })).toEqual({ storyId: "US-14", action: "finish" });
-    expect(transitionFromToolCall("mcp", {
-      server: "trellis",
-      tool: "transition",
-      args: JSON.stringify({ story_id: "US-14", action: "start" }),
-    })).toEqual({ storyId: "US-14", action: "start" });
-    expect(transitionFromToolCall("mcp", {
-      server: "other",
-      tool: "transition",
-      args: { story_id: "US-14", action: "start" },
-    })).toBeUndefined();
-    expect(transitionFromToolCall("trellis_transition", {
-      story_id: "US-14",
-      action: "refine",
-    })).toBeUndefined();
-  });
+const empty = overview();
+const active = (id = "US-14", path = "/repo") => overview({ id, status: "in_progress", worktree_path: path });
+const done = (id = "US-14") => overview({ id, status: "done" });
 
-  it("UT-31 rechnet gesamten Start- und Finish-Turn und verwirft Außen-Turns", () => {
+describe("UT-31 UT-34 Trellis-Overview-basierte Token-Usage-Attribution und Story-Statuswechsel", () => {
+  it("UT-31 UT-34 attribuiert Start-, Lauf- und Finish-Turn nur aus Overviews", () => {
     const tracker = new StoryUsageTracker();
 
-    tracker.beginTurn();
-    expect(tracker.endTurn(assistant(3))).toBeUndefined();
+    tracker.beginTurn(empty, "/repo");
+    expect(tracker.endTurn(assistant(3), empty, "/repo")).toBeUndefined();
 
-    tracker.beginTurn();
+    tracker.beginTurn(empty, "/repo");
     tracker.recordSubagent({ id: "start-agent", usage: { totalTokens: 5 } });
-    const start = transition("start", "US-14", "start");
-    tracker.recordTransitionCall(start.toolCallId, start.toolName, start.input);
-    tracker.recordTransitionResult(start.toolCallId, false);
-    expect(tracker.endTurn(assistant(7))).toEqual({ storyId: "US-14", main: 7, subagents: 5 });
+    expect(tracker.endTurn(assistant(7), active(), "/repo")).toEqual({
+      storyId: "US-14", main: 7, subagents: 5,
+    });
 
-    tracker.beginTurn();
-    expect(tracker.endTurn(assistant(11))).toEqual({ storyId: "US-14", main: 11, subagents: 0 });
+    tracker.beginTurn(active(), "/repo");
+    expect(tracker.endTurn(assistant(11), active(), "/repo")).toEqual({
+      storyId: "US-14", main: 11, subagents: 0,
+    });
 
-    tracker.beginTurn();
-    const foreignFinish = transition("foreign-finish", "US-15", "finish");
-    tracker.recordTransitionCall(foreignFinish.toolCallId, foreignFinish.toolName, foreignFinish.input);
-    tracker.recordTransitionResult(foreignFinish.toolCallId, false);
-    expect(tracker.endTurn(assistant(12))).toEqual({ storyId: "US-14", main: 12, subagents: 0 });
+    tracker.beginTurn(active(), "/repo");
+    expect(tracker.endTurn(assistant(17), done(), "/repo")).toEqual({
+      storyId: "US-14", main: 17, subagents: 0,
+    });
 
-    tracker.beginTurn();
-    const failedFinish = transition("failed-finish", "US-14", "finish");
-    tracker.recordTransitionCall(failedFinish.toolCallId, failedFinish.toolName, failedFinish.input);
-    tracker.recordTransitionResult(failedFinish.toolCallId, true);
-    expect(tracker.endTurn(assistant(13))).toEqual({ storyId: "US-14", main: 13, subagents: 0 });
+    tracker.beginTurn(done(), "/repo");
+    expect(tracker.endTurn(assistant(19), done(), "/repo")).toBeUndefined();
+  });
 
-    tracker.beginTurn();
-    const finish = transition("finish", "US-14", "finish");
-    tracker.recordTransitionCall(finish.toolCallId, finish.toolName, finish.input);
-    tracker.recordTransitionResult(finish.toolCallId, false);
-    expect(tracker.endTurn(assistant(17))).toEqual({ storyId: "US-14", main: 17, subagents: 0 });
+  it("UT-31 UT-34 verwendet aktualisiertes Start-Trellis-Overview statt Tool-Aufrufformen", () => {
+    const tracker = new StoryUsageTracker();
+    tracker.beginTurn(empty, "/repo");
+    tracker.updateTurnStartOverview(active("US-14", "/repo"), "/repo");
 
-    tracker.beginTurn();
-    expect(tracker.endTurn(assistant(19))).toBeUndefined();
+    const message = {
+      ...assistant(23),
+      content: [{
+        type: "text",
+        text: "await tools.trellis_transition({story_id: 'US-999', action: 'finish'})",
+      }],
+    };
+    expect(tracker.endTurn(message, done("US-14"), "/repo")).toEqual({
+      storyId: "US-14", main: 23, subagents: 0,
+    });
+  });
+});
+
+describe("UT-35 Eindeutige Worktree-Pfad-Entsprechung", () => {
+  const multiple = overview(
+    { id: "US-14", status: "in_progress", worktree_path: "/work/US-14" },
+    { id: "US-15", status: "in_progress", worktree_path: "/work/US-15" },
+  );
+
+  it("UT-35 attribuiert bei genau einer ctx.cwd-Entsprechung", () => {
+    const tracker = new StoryUsageTracker();
+    tracker.beginTurn(empty, "/work/US-15");
+    expect(tracker.endTurn(assistant(29), multiple, "/work/US-15")).toEqual({
+      storyId: "US-15", main: 29, subagents: 0,
+    });
+  });
+
+  it("UT-35 verwirft und warnt bei keiner oder mehrfacher Entsprechung", () => {
+    const warn = vi.fn();
+    const tracker = new StoryUsageTracker(warn);
+
+    tracker.beginTurn(empty, "/work/other");
+    expect(tracker.endTurn(assistant(31), multiple, "/work/other")).toBeUndefined();
+
+    const duplicatePaths = overview(
+      { id: "US-14", status: "in_progress", worktree_path: "/work/shared" },
+      { id: "US-15", status: "in_progress", worktree_path: "/work/shared" },
+    );
+    tracker.beginTurn(empty, "/work/shared");
+    expect(tracker.endTurn(assistant(37), duplicatePaths, "/work/shared")).toBeUndefined();
+
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledWith(
+      "Token-Usage nicht attribuiert: mehrere in_progress-Storys ohne eindeutigen Worktree-Pfad für ctx.cwd",
+    );
+  });
+
+  it("UT-35 verwirft Turn nach mehrdeutigem Start-Trellis-Overview trotz eindeutigem End-Trellis-Overview", () => {
+    const warn = vi.fn();
+    const tracker = new StoryUsageTracker(warn);
+    tracker.beginTurn(multiple, "/work/other");
+
+    expect(tracker.endTurn(
+      assistant(41),
+      overview(
+        { id: "US-14", status: "done", worktree_path: "/work/US-14" },
+        { id: "US-15", status: "in_progress", worktree_path: "/work/US-15" },
+      ),
+      "/work/US-15",
+    )).toBeUndefined();
+    expect(warn).toHaveBeenCalledOnce();
   });
 });
 
 describe("UT-32 Haupt-Agent-Token-Usage und Subagent-Token-Usage aus pi-subagents-Records", () => {
   it("UT-32 liest ausschließlich gültige totalTokens und dedupliziert pi-subagents-Records", () => {
     const tracker = new StoryUsageTracker();
-    tracker.beginTurn();
-    const start = transition("start", "US-14", "start");
-    tracker.recordTransitionCall(start.toolCallId, start.toolName, start.input);
-    tracker.recordTransitionResult(start.toolCallId, false);
+    tracker.beginTurn(empty, "/repo");
 
     tracker.recordSubagent({ id: "completed", usage: { totalTokens: 23 }, result: "LLM says 999" });
     tracker.recordSubagent({ id: "completed", usage: { totalTokens: 23 } });
@@ -102,11 +132,13 @@ describe("UT-32 Haupt-Agent-Token-Usage und Subagent-Token-Usage aus pi-subagent
       role: "assistant",
       usage: { totalTokens: 31 },
       content: [{ type: "text", text: "Tokens: 999999" }],
-    })).toEqual({ storyId: "US-14", main: 31, subagents: 52 });
+    }, active(), "/repo")).toEqual({ storyId: "US-14", main: 31, subagents: 52 });
 
     tracker.recordSubagent({ id: "between-turns", usage: { totalTokens: 37 } });
-    tracker.beginTurn();
-    expect(tracker.endTurn(assistant(0))).toEqual({ storyId: "US-14", main: 0, subagents: 37 });
+    tracker.beginTurn(active(), "/repo");
+    expect(tracker.endTurn(assistant(0), active(), "/repo")).toEqual({
+      storyId: "US-14", main: 0, subagents: 37,
+    });
     expect(assistantTotalTokens({ role: "user", usage: { totalTokens: 100 } })).toBe(0);
     expect(assistantTotalTokens({ role: "assistant", usage: { totalTokens: -1 } })).toBe(0);
   });
@@ -123,8 +155,8 @@ describe("UT-32 Haupt-Agent-Token-Usage und Subagent-Token-Usage aus pi-subagent
   });
 });
 
-describe("UT-33 CLI-Argumente, Serialisierung und Retry", () => {
-  it("UT-33 sendet exakte Usage-Deltas einmal, serialisiert neue Token-Usage und kehrt ohne Await zurück", async () => {
+describe("UT-33 UT-35 CLI-Argumente, Serialisierung und Retry", () => {
+  it("UT-33 UT-35 sendet exakte Usage-Deltas einmal, serialisiert neue Token-Usage und kehrt ohne Await zurück", async () => {
     let resolveFirst: ((result: UsageCommandResult) => void) | undefined;
     const first = new Promise<UsageCommandResult>((resolve) => {
       resolveFirst = resolve;
@@ -150,10 +182,9 @@ describe("UT-33 CLI-Argumente, Serialisierung und Retry", () => {
     expect(run).toHaveBeenNthCalledWith(2, "trellis", [
       "usage", "add", "project-c325", "US-14", "--main", "3", "--subagents", "2",
     ]);
-    await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(2));
   });
 
-  it("UT-33 behält fehlgeschlagene Usage-Deltas, warnt und versucht sie später erneut", async () => {
+  it("UT-33 UT-35 behält fehlgeschlagene Usage-Deltas, warnt und versucht sie später erneut", async () => {
     const warn = vi.fn();
     const run = vi.fn()
       .mockResolvedValueOnce({ code: 127, stderr: "trellis fehlt" })
