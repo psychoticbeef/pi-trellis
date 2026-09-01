@@ -1,10 +1,22 @@
 import { resolve } from "node:path";
 import type { StoryOverview, TrellisOverview } from "./context.js";
 
+export interface UsageCategories {
+  input: bigint;
+  output: bigint;
+  cacheRead: bigint;
+  cacheWrite: bigint;
+}
+
+export interface UsageAmount {
+  categories: UsageCategories;
+  legacy: bigint;
+}
+
 export interface UsageDelta {
   storyId: string;
-  main: number;
-  subagents: number;
+  main: UsageAmount;
+  subagents: UsageAmount;
 }
 
 export interface UsageCommandResult {
@@ -30,8 +42,8 @@ export class StoryUsageTracker {
   private turnStartOverview: TrellisOverview | undefined;
   private turnCwd = "";
   private turnOpen = false;
-  private turnSubagentTokens = 0;
-  private betweenTurnSubagentTokens = 0;
+  private turnSubagentUsage = emptyUsageAmount();
+  private betweenTurnSubagentUsage = emptyUsageAmount();
   private readonly seenSubagentRecords = new Set<string>();
 
   constructor(private readonly warn: (message: string) => void = () => {}) {}
@@ -40,8 +52,8 @@ export class StoryUsageTracker {
     this.turnOpen = true;
     this.turnStartOverview = overview;
     this.turnCwd = cwd;
-    this.turnSubagentTokens = this.betweenTurnSubagentTokens;
-    this.betweenTurnSubagentTokens = 0;
+    this.turnSubagentUsage = cloneUsageAmount(this.betweenTurnSubagentUsage);
+    this.betweenTurnSubagentUsage = emptyUsageAmount();
   }
 
   updateTurnStartOverview(overview: TrellisOverview, cwd: string): void {
@@ -56,23 +68,23 @@ export class StoryUsageTracker {
     if (typeof id !== "string" || id.length === 0 || this.seenSubagentRecords.has(id)) return;
     this.seenSubagentRecords.add(id);
 
-    const tokens = usageTotalTokens(record.usage);
-    if (tokens === undefined) return;
-    if (this.turnOpen) this.turnSubagentTokens += tokens;
-    else this.betweenTurnSubagentTokens += tokens;
+    const usage = normalizeUsage(record.usage);
+    if (!usage) return;
+    if (this.turnOpen) addUsageAmount(this.turnSubagentUsage, usage);
+    else addUsageAmount(this.betweenTurnSubagentUsage, usage);
   }
 
   endTurn(message: unknown, overview?: TrellisOverview, cwd = this.turnCwd): UsageDelta | undefined {
-    const main = assistantTotalTokens(message);
-    const subagents = this.turnSubagentTokens;
+    const main = assistantUsage(message);
+    const subagents = cloneUsageAmount(this.turnSubagentUsage);
     const selection = selectTurnStory(this.turnStartOverview, overview, this.turnCwd, cwd);
 
     this.turnOpen = false;
     this.turnStartOverview = undefined;
     this.turnCwd = "";
-    this.turnSubagentTokens = 0;
+    this.turnSubagentUsage = emptyUsageAmount();
 
-    if (main === 0 && subagents === 0) return undefined;
+    if (usageAmountTotal(main) === 0n && usageAmountTotal(subagents) === 0n) return undefined;
     if (selection.ambiguous) this.warn(ambiguousUsageWarning());
     if (!selection.storyId) return undefined;
     return { storyId: selection.storyId, main, subagents };
@@ -82,8 +94,8 @@ export class StoryUsageTracker {
     this.turnStartOverview = undefined;
     this.turnCwd = "";
     this.turnOpen = false;
-    this.turnSubagentTokens = 0;
-    this.betweenTurnSubagentTokens = 0;
+    this.turnSubagentUsage = emptyUsageAmount();
+    this.betweenTurnSubagentUsage = emptyUsageAmount();
     this.seenSubagentRecords.clear();
   }
 }
@@ -103,11 +115,16 @@ export class UsageDeltaReporter {
     const key = usageKey(projectId, delta.storyId);
     const current = this.pending.get(key);
     if (current) {
-      current.main += delta.main;
-      current.subagents += delta.subagents;
+      addUsageAmount(current.main, delta.main);
+      addUsageAmount(current.subagents, delta.subagents);
       return;
     }
-    this.pending.set(key, { projectId, ...delta });
+    this.pending.set(key, {
+      projectId,
+      storyId: delta.storyId,
+      main: cloneUsageAmount(delta.main),
+      subagents: cloneUsageAmount(delta.subagents),
+    });
   }
 
   flush(): void {
@@ -131,22 +148,30 @@ export class UsageDeltaReporter {
 
     for (const [key, pending] of [...this.pending]) {
       if (generation !== this.generation) break;
-      const snapshot = { main: pending.main, subagents: pending.subagents };
-      try {
-        const result = await this.run("trellis", usageArguments(pending, snapshot));
+      const snapshot = clonePendingUsage(pending);
+
+      if (categorizedTotal(snapshot) > 0n) {
+        const succeeded = await this.report(
+          pending,
+          categorizedUsageArguments(pending, snapshot),
+          generation,
+        );
         if (generation !== this.generation) break;
-        if (result.code !== 0) {
-          this.warn(usageWarning(pending, result.stderr || `Exit-Code ${result.code}`));
-          continue;
-        }
-        const current = this.pending.get(key);
-        if (!current) continue;
-        current.main -= snapshot.main;
-        current.subagents -= snapshot.subagents;
-        if (current.main === 0 && current.subagents === 0) this.pending.delete(key);
-      } catch (error) {
+        if (succeeded) subtractCategories(pending, snapshot);
+      }
+
+      if (legacyTotal(snapshot) > 0n) {
+        const succeeded = await this.report(
+          pending,
+          legacyUsageArguments(pending, snapshot),
+          generation,
+        );
         if (generation !== this.generation) break;
-        this.warn(usageWarning(pending, messageOf(error)));
+        if (succeeded) subtractLegacy(pending, snapshot);
+      }
+
+      if (usageAmountTotal(pending.main) === 0n && usageAmountTotal(pending.subagents) === 0n) {
+        this.pending.delete(key);
       }
     }
 
@@ -157,11 +182,62 @@ export class UsageDeltaReporter {
       void this.flushPending(this.generation);
     }
   }
+
+  private async report(
+    pending: PendingUsage,
+    args: string[],
+    generation: number,
+  ): Promise<boolean> {
+    try {
+      const result = await this.run("trellis", args);
+      if (generation !== this.generation) return false;
+      if (result.code !== 0) {
+        this.warn(usageWarning(pending, result.stderr || `Exit-Code ${result.code}`));
+        return false;
+      }
+      return true;
+    } catch (error) {
+      if (generation !== this.generation) return false;
+      this.warn(usageWarning(pending, messageOf(error)));
+      return false;
+    }
+  }
 }
 
 export function assistantTotalTokens(message: unknown): number {
   if (!isRecord(message) || message.role !== "assistant") return 0;
   return usageTotalTokens(message.usage) ?? 0;
+}
+
+function assistantUsage(message: unknown): UsageAmount {
+  if (!isRecord(message) || message.role !== "assistant") return emptyUsageAmount();
+  return normalizeUsage(message.usage) ?? emptyUsageAmount();
+}
+
+function normalizeUsage(value: unknown): UsageAmount | undefined {
+  const totalTokens = usageTotalTokens(value);
+  if (totalTokens === undefined || !isRecord(value)) return undefined;
+
+  const input = usageField(value.input);
+  const output = usageField(value.output);
+  const cacheRead = usageField(value.cacheRead);
+  const cacheWrite = usageField(value.cacheWrite);
+  if (
+    input !== undefined && output !== undefined &&
+    cacheRead !== undefined && cacheWrite !== undefined &&
+    BigInt(input) + BigInt(output) + BigInt(cacheRead) + BigInt(cacheWrite) === BigInt(totalTokens)
+  ) {
+    return {
+      categories: {
+        input: BigInt(input),
+        output: BigInt(output),
+        cacheRead: BigInt(cacheRead),
+        cacheWrite: BigInt(cacheWrite),
+      },
+      legacy: 0n,
+    };
+  }
+  return { categories: emptyCategories(), legacy: BigInt(totalTokens) };
 }
 
 function selectTurnStory(
@@ -214,26 +290,96 @@ function ambiguousUsageWarning(): string {
 
 function usageTotalTokens(value: unknown): number | undefined {
   if (!isRecord(value)) return undefined;
-  const totalTokens = value.totalTokens;
-  return typeof totalTokens === "number" && Number.isSafeInteger(totalTokens) && totalTokens >= 0
-    ? totalTokens
+  return usageField(value.totalTokens);
+}
+
+function usageField(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+    ? value
     : undefined;
 }
 
-function usageArguments(
-  pending: PendingUsage,
-  snapshot: { main: number; subagents: number },
-): string[] {
+function categorizedUsageArguments(pending: PendingUsage, snapshot: PendingUsage): string[] {
   return [
-    "usage",
-    "add",
-    pending.projectId,
-    pending.storyId,
-    "--main",
-    String(snapshot.main),
-    "--subagents",
-    String(snapshot.subagents),
+    "usage", "add", pending.projectId, pending.storyId,
+    "--main-input", String(snapshot.main.categories.input),
+    "--main-output", String(snapshot.main.categories.output),
+    "--main-cache-read", String(snapshot.main.categories.cacheRead),
+    "--main-cache-write", String(snapshot.main.categories.cacheWrite),
+    "--subagents-input", String(snapshot.subagents.categories.input),
+    "--subagents-output", String(snapshot.subagents.categories.output),
+    "--subagents-cache-read", String(snapshot.subagents.categories.cacheRead),
+    "--subagents-cache-write", String(snapshot.subagents.categories.cacheWrite),
   ];
+}
+
+function legacyUsageArguments(pending: PendingUsage, snapshot: PendingUsage): string[] {
+  return [
+    "usage", "add", pending.projectId, pending.storyId,
+    "--main", String(snapshot.main.legacy),
+    "--subagents", String(snapshot.subagents.legacy),
+  ];
+}
+
+function emptyCategories(): UsageCategories {
+  return { input: 0n, output: 0n, cacheRead: 0n, cacheWrite: 0n };
+}
+
+function emptyUsageAmount(): UsageAmount {
+  return { categories: emptyCategories(), legacy: 0n };
+}
+
+function cloneUsageAmount(usage: UsageAmount): UsageAmount {
+  return { categories: { ...usage.categories }, legacy: usage.legacy };
+}
+
+function clonePendingUsage(pending: PendingUsage): PendingUsage {
+  return {
+    projectId: pending.projectId,
+    storyId: pending.storyId,
+    main: cloneUsageAmount(pending.main),
+    subagents: cloneUsageAmount(pending.subagents),
+  };
+}
+
+function addUsageAmount(target: UsageAmount, delta: UsageAmount): void {
+  target.categories.input += delta.categories.input;
+  target.categories.output += delta.categories.output;
+  target.categories.cacheRead += delta.categories.cacheRead;
+  target.categories.cacheWrite += delta.categories.cacheWrite;
+  target.legacy += delta.legacy;
+}
+
+function usageAmountTotal(usage: UsageAmount): bigint {
+  return usage.categories.input + usage.categories.output +
+    usage.categories.cacheRead + usage.categories.cacheWrite + usage.legacy;
+}
+
+function categorizedTotal(usage: UsageDelta): bigint {
+  return usage.main.categories.input + usage.main.categories.output +
+    usage.main.categories.cacheRead + usage.main.categories.cacheWrite +
+    usage.subagents.categories.input + usage.subagents.categories.output +
+    usage.subagents.categories.cacheRead + usage.subagents.categories.cacheWrite;
+}
+
+function legacyTotal(usage: UsageDelta): bigint {
+  return usage.main.legacy + usage.subagents.legacy;
+}
+
+function subtractCategories(target: UsageDelta, snapshot: UsageDelta): void {
+  target.main.categories.input -= snapshot.main.categories.input;
+  target.main.categories.output -= snapshot.main.categories.output;
+  target.main.categories.cacheRead -= snapshot.main.categories.cacheRead;
+  target.main.categories.cacheWrite -= snapshot.main.categories.cacheWrite;
+  target.subagents.categories.input -= snapshot.subagents.categories.input;
+  target.subagents.categories.output -= snapshot.subagents.categories.output;
+  target.subagents.categories.cacheRead -= snapshot.subagents.categories.cacheRead;
+  target.subagents.categories.cacheWrite -= snapshot.subagents.categories.cacheWrite;
+}
+
+function subtractLegacy(target: UsageDelta, snapshot: UsageDelta): void {
+  target.main.legacy -= snapshot.main.legacy;
+  target.subagents.legacy -= snapshot.subagents.legacy;
 }
 
 function usageKey(projectId: string, storyId: string): string {
