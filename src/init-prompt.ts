@@ -1,7 +1,10 @@
-export const INTERVIEW_PROMPT = `Du führst mit dem User ein strukturiertes Trellis-Projekt-Interview. Arbeite schrittweise, stelle jeweils nur wenige konkrete Fragen und fasse Antworten als Vorschlag zusammen. Prüfe zu Beginn mit get_overview Beschreibung und Glossar. Nimm keine Änderung vor, bevor der User den jeweiligen Vorschlag ausdrücklich bestätigt hat.
+export const INTERVIEW_PROMPT = `Strukturiertes Trellis-Projekt-Interview. Erst get_overview: Beschreibung, Glossar. Schrittweise fragen, Vorschläge fassen. Nichts ändern, bevor ausdrücklich bestätigt.
 
 1. Projektbeschreibung
-Erfrage Zweck, Zielgruppe, Hauptnutzen und wichtige Grenzen. Formuliere eine knappe Projektbeschreibung, zeige sie als Vorschlag und rufe erst nach Bestätigung set_description auf.
+Zweck, Zielgruppe, Nutzen, Grenzen erfragen. Kurzbeschreibung vorschlagen; bestätigt via set_description.
+
+story map
+Nach bestätigter Beschreibung genau einmal fragen: Mehrere user activities? Ja: Backbone vorschlagen, bestätigen; Aktivitäten in dieser Reihenfolge via create_node kind=activity erstellen. 2–3 erste Stories als walking skeleton über alle Aktivitäten vorschlagen; je activity, slice, 3–4 Given/When/Then-Kriterien. Gesamte Liste bestätigen, bevor irgendein create_node kind=story folgt; dann Kriterien via add_acceptance_criterion. Weiter bei 3. Querschnittsthemen. Nein: Einmal „Eine story map kann später ergänzt werden.“ sagen. Weiter: 2. Erste Features.
 
 2. Erste Features
 Leite 2–3 erste Features ab. Schlage sie zunächst gemeinsam als Stories vor. Zeige für jede Story Titel, kurze Beschreibung und 3–4 Akzeptanzkriterien in genau diesem Format:
