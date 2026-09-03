@@ -1,6 +1,7 @@
 import { basename, dirname, join } from "node:path";
 
 export const MAX_CONTEXT_LENGTH = 1500;
+const MAP_LINE_BUDGET = 100;
 const STATUSES = ["todo", "refined", "in_progress", "done"];
 
 export interface GlossaryEntry {
@@ -17,9 +18,42 @@ export interface StoryOverview {
   gates_open?: boolean;
 }
 
+export interface ActivityOverview {
+  id?: string;
+  title?: string;
+  position?: number;
+}
+
+export interface SliceProgressOverview {
+  slice?: number;
+  done?: number;
+  total?: number;
+}
+
+export interface StoryMapGroupOverview {
+  activity?: ActivityOverview;
+  unmapped?: boolean;
+  stories?: StoryOverview[];
+  slice_progress?: SliceProgressOverview[];
+}
+
+export interface StoryMapGapOverview {
+  activity_id?: string;
+  slice?: number;
+}
+
+export interface StoryMapOverview {
+  status?: string;
+  unmapped_story_ids?: string[];
+  groups?: StoryMapGroupOverview[];
+  gaps?: StoryMapGapOverview[];
+}
+
 export interface TrellisOverview {
   description?: string;
   glossary?: GlossaryEntry[];
+  activities?: ActivityOverview[];
+  story_map?: StoryMapOverview;
   stories?: StoryOverview[];
   stale_nodes?: unknown[];
 }
@@ -68,6 +102,9 @@ export function formatTrellisContext(
       return `${compact(story.id || "?")} ${compact(story.title || "-")} worktree=${compact(worktree)}`;
     });
   const stale = (overview.stale_nodes ?? []).map(renderStaleNode);
+  const mapLine = overview.story_map === undefined
+    ? undefined
+    : summarize(renderStoryMap(overview.story_map), MAP_LINE_BUDGET);
   const reviewHint = options.isReviewUnlocked !== undefined && stories.some((story) =>
     story.status === "in_progress" &&
     typeof story.id === "string" &&
@@ -82,6 +119,7 @@ export function formatTrellisContext(
     `Glossar: ${summarize(glossary, 350)}`,
     `Kanban: ${clip(kanban, 160)}`,
     `in_progress: ${summarize(active, 300)}`,
+    ...(mapLine === undefined ? [] : [`Map: ${clip(mapLine, MAP_LINE_BUDGET)}`]),
     ...(reviewHint ? [reviewHint] : []),
     `stale: ${summarize(stale, 200)}`,
     "</trellis-context>",
@@ -109,6 +147,31 @@ function summarize(items: string[], limit: number): string {
     return clip(result, Math.max(1, limit - marker.length)) + marker;
   }
   return clip(result, limit);
+}
+
+function renderStoryMap(storyMap: StoryMapOverview): string[] {
+  const groups = Array.isArray(storyMap.groups) ? storyMap.groups : [];
+  const activities = groups
+    .filter((group) => group && !group.unmapped && group.activity)
+    .map((group) => {
+      const progress = Array.isArray(group.slice_progress) ? group.slice_progress : [];
+      const selected = progress.find((entry) => finite(entry.done) < finite(entry.total))
+        ?? progress.at(-1);
+      const title = text(group.activity?.title) || text(group.activity?.id) || "?";
+      return `${compact(title)} ${finite(selected?.done)}/${finite(selected?.total)}`;
+    });
+  const unmapped = Array.isArray(storyMap.unmapped_story_ids)
+    ? storyMap.unmapped_story_ids.length
+    : 0;
+  return [...activities, `unmapped ${unmapped}`];
+}
+
+function finite(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function text(value: unknown): string {
+  return typeof value === "string" ? value : "";
 }
 
 function renderStaleNode(value: unknown): string {
