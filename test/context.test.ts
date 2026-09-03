@@ -131,3 +131,84 @@ describe("UT-37 Kontext-Hinweis und Freischaltung", () => {
     expect(unlocked).not.toContain("Reviews nicht proaktiv starten");
   });
 });
+
+describe("UT-43 story map formatieren", () => {
+  it("UT-43 erhält Aktivitätsreihenfolge, wählt niedrigsten offenen Slice und zählt unmapped", () => {
+    const block = formatTrellisContext({
+      story_map: {
+        status: "2 unmapped",
+        unmapped_story_ids: ["US-8", "US-9"],
+        gaps: [{ activity_id: "UA-2", slice: 1 }],
+        groups: [
+          {
+            activity: { id: "UA-2", title: "Deliver", position: 2 },
+            stories: [],
+            slice_progress: [
+              { slice: 1, done: 1, total: 1 },
+              { slice: 2, done: 1, total: 3 },
+              { slice: 3, done: 0, total: 2 },
+            ],
+          },
+          {
+            activity: { id: "UA-1", title: "Discover", position: 1 },
+            stories: [],
+            slice_progress: [{ slice: 1, done: 2, total: 2 }],
+          },
+          { unmapped: true, stories: [{ id: "US-8" }] },
+          { activity: { id: "UA-3", title: "Operate", position: 3 }, stories: [] },
+        ],
+      },
+    });
+
+    expect(block).toContain("Map: Deliver 1/3; Discover 2/2; Operate 0/0; unmapped 2");
+    expect(block.match(/^Map:/gm)).toHaveLength(1);
+  });
+
+  it("UT-43 toleriert partielle story_map-Felder", () => {
+    const block = formatTrellisContext({ story_map: { groups: [{}] } });
+    expect(block).toContain("Map: unmapped 0");
+  });
+});
+
+describe("UT-44 bedingte map line und Kontextbudget", () => {
+  it("UT-44 hält Ausgabe ohne story_map byte-identisch", () => {
+    const block = formatTrellisContext({
+      description: "Projektbeschreibung",
+      glossary: [{ term: "Trellis-Modus", definition: "aktiv" }],
+      stories: [
+        { id: "US-1", title: "Aktiv", status: "in_progress", worktree_path: "/worktree" },
+        { id: "US-2", title: "Fertig", status: "done" },
+      ],
+      stale_nodes: ["DD-9 never approved"],
+    });
+
+    expect(block).toBe([
+      "<trellis-context>",
+      "Description: Projektbeschreibung",
+      "Glossar: Trellis-Modus=aktiv",
+      "Kanban: todo=0 refined=0 in_progress=1 done=1",
+      "in_progress: US-1 Aktiv worktree=/worktree",
+      "stale: DD-9 never approved",
+      "</trellis-context>",
+    ].join("\n"));
+  });
+
+  it("UT-44 clippt lange map line mit bestehendem Auslassungsmarker ohne Throw", () => {
+    const story_map = {
+      unmapped_story_ids: Array.from({ length: 30 }, (_, index) => `US-${index}`),
+      groups: Array.from({ length: 80 }, (_, index) => ({
+        activity: { id: `UA-${index}`, title: `Activity ${index} ${"x".repeat(80)}`, position: index },
+        slice_progress: [{ slice: 1, done: 0, total: 1 }],
+      })),
+    };
+
+    const first = formatTrellisContext({ story_map });
+    const second = formatTrellisContext({ story_map });
+    const mapLine = first.split("\n").find((line) => line.startsWith("Map: "))!;
+
+    expect(first).toBe(second);
+    expect(mapLine).toContain("…(+");
+    expect(mapLine.length).toBeLessThanOrEqual(105);
+    expect(first.length).toBeLessThan(MAX_CONTEXT_LENGTH);
+  });
+});
