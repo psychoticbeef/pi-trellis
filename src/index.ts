@@ -26,6 +26,7 @@ import {
   type SpecsForPathResult,
 } from "./mcp-client.js";
 import { buildReviewPrompt } from "./review-prompt.js";
+import { buildStoryPrompt } from "./story-prompt.js";
 import {
   finishStoryIdFromToolCall,
   reviewerFromAgentToolCall,
@@ -78,6 +79,7 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
     let activationGeneration = 0;
     let statusUpdateGeneration = 0;
     let disabledForSession = false;
+    let retrofitMentioned = false;
     const pendingFileChanges = new Map<string, {
       state: ActiveState;
       absolutePath: string;
@@ -174,6 +176,7 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
       statusUpdateGeneration += 1;
       active = undefined;
       disabledForSession = false;
+      retrofitMentioned = false;
       reviewGate.reset();
       pendingReviews.clear();
       usageTracker.reset();
@@ -256,6 +259,41 @@ export function createTrellisExtension(dependencies: ExtensionDependencies = {})
         } catch {
           pi.sendUserMessage(ONBOARDING_INTERVIEW_PROMPT);
         }
+      },
+    });
+
+    pi.registerCommand("trellis:story", {
+      description: "Feature mit placement proposals als Story ergänzen",
+      handler: async (args, ctx) => {
+        if (args.trim().length === 0) {
+          emit("Usage: /trellis:story <Feature-Idee>");
+          return;
+        }
+        const state = active;
+        if (!state) {
+          emit("/trellis:story erfordert einen aktiven Trellis-Modus. Führe zuerst /trellis:on aus.");
+          return;
+        }
+
+        let overview: TrellisOverview;
+        try {
+          overview = await getOverview(state.project.id, ctx.signal);
+        } catch (error) {
+          if (active === state) emit(`/trellis:story nicht verfügbar: ${messageOf(error)}`);
+          return;
+        }
+        if (active !== state) return;
+
+        const hasStoryMap = overview.story_map !== undefined;
+        const mentionRetrofit = !hasStoryMap &&
+          (overview.stories?.length ?? 0) >= 10 &&
+          !retrofitMentioned;
+        pi.sendUserMessage(buildStoryPrompt({
+          featureIdea: args,
+          hasStoryMap,
+          mentionRetrofit,
+        }));
+        if (mentionRetrofit) retrofitMentioned = true;
       },
     });
 
