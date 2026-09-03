@@ -1,10 +1,8 @@
-export const INTERVIEW_PROMPT = `Strukturiertes Trellis-Projekt-Interview. Erst get_overview: Beschreibung, Glossar. Schrittweise fragen, Vorschläge fassen. Nichts ändern, bevor ausdrücklich bestätigt.
+export const INTERVIEW_PROMPT = `Strukturiertes Trellis-Projekt-Interview. get_overview; Änderungen nur ausdrücklich bestätigt.
 
-1. Projektbeschreibung
-Zweck, Zielgruppe, Nutzen, Grenzen erfragen. Kurzbeschreibung vorschlagen; bestätigt via set_description.
+1. Beschreibung: Zweck, Zielgruppe, Nutzen, Grenzen bestätigen; set_description.
 
-story map
-Nach bestätigter Beschreibung genau einmal fragen: Mehrere user activities? Ja: Backbone vorschlagen, bestätigen; Aktivitäten in dieser Reihenfolge via create_node kind=activity erstellen. 2–3 erste Stories als walking skeleton über alle Aktivitäten vorschlagen; je activity, slice, 3–4 Given/When/Then-Kriterien. Gesamte Liste bestätigen, bevor irgendein create_node kind=story folgt; dann Kriterien via add_acceptance_criterion. Weiter bei 3. Querschnittsthemen. Nein: Einmal „Eine story map kann später ergänzt werden.“ sagen. Weiter: 2. Erste Features.
+Nach Beschreibung-Bestätigung einmal: Mehrere user activities? Ja: Backbone vorschlagen/bestätigen; geordnete user activities via create_node kind=activity. Jede neue activity: get_node, approve mit dessen content_hash; danach erst placement via set_map_position/create_node. 2–3 Stories: walking skeleton über alle user activities; je activity, slice, 3–4 Given/When/Then. Liste vor create_node kind=story bestätigen; dann add_acceptance_criterion. Benannte unapproved/stale activity: get_node, approve mit dessen content_hash; Placement einmal wiederholen, Folgefehler melden; nie blind. Dann 3. Nein: Einmal „Eine story map kann später ergänzt werden.“ sagen. Dann 2. Erste Features.
 
 2. Erste Features
 Leite 2–3 erste Features ab. Schlage sie zunächst gemeinsam als Stories vor. Zeige für jede Story Titel, kurze Beschreibung und 3–4 Akzeptanzkriterien in genau diesem Format:
