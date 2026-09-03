@@ -42,12 +42,11 @@ describe("IT-5 IT-12 Zustandserkennung des init-Commands im pi-Harness", () => {
     expectInOrder(INTERVIEW_PROMPT, [
       "set_description",
       "Mehrere user activities?",
-      "Backbone vorschlagen, bestätigen",
+      "Backbone vorschlagen/bestätigen",
       "create_node kind=activity",
-      "walking skeleton über alle Aktivitäten",
-      "Gesamte Liste bestätigen",
-      "create_node kind=story",
-      "Weiter bei 3. Querschnittsthemen",
+      "walking skeleton über alle user activities",
+      "Liste vor create_node kind=story bestätigen",
+      "Dann 3.",
       "Nein:",
       "Eine story map kann später ergänzt werden.",
       "2. Erste Features",
@@ -57,5 +56,20 @@ describe("IT-5 IT-12 Zustandserkennung des init-Commands im pi-Harness", () => {
     }
     expect(ONBOARDING_INTERVIEW_PROMPT.startsWith("Du führst zuerst den sicheren Onboarding-Modus")).toBe(true);
     expect(ONBOARDING_INTERVIEW_PROMPT.endsWith(INTERVIEW_PROMPT)).toBe(true);
+  });
+
+  it("IT-23 verbindet Activity-Erstellung, Approval und Placement-Recovery", async () => {
+    const messages = await runInitPaths("pi-trellis-it23");
+    for (const message of messages) {
+      expectInOrder(message, [
+        "create_node kind=activity",
+        "Jede neue activity: get_node",
+        "approve mit dessen content_hash",
+        "danach erst placement via set_map_position/create_node",
+      ]);
+      expect(message).toMatch(
+        /Benannte unapproved\/stale activity:[\s\S]*get_node[\s\S]*approve mit dessen content_hash[\s\S]*Placement einmal wiederholen, Folgefehler melden; nie blind/,
+      );
+    }
   });
 });

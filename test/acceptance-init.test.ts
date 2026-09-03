@@ -30,7 +30,7 @@ describe("AT-5 AT-15 Geführtes Onboarding und Projekt-Interview", () => {
   it("AT-35 AT-36 bietet story map einmal an und bewahrt Nein-Fluss samt Onboarding-Prompt", () => {
     expect(INTERVIEW_PROMPT.match(/mehrere user activities/gi)).toHaveLength(1);
     expect(INTERVIEW_PROMPT).toMatch(
-      /set_description[\s\S]*Nach bestätigter Beschreibung genau einmal[\s\S]*Backbone vorschlagen, bestätigen[\s\S]*in dieser Reihenfolge[\s\S]*create_node kind=activity[\s\S]*walking skeleton über alle Aktivitäten[\s\S]*je activity, slice[\s\S]*Gesamte Liste bestätigen[\s\S]*bevor irgendein create_node kind=story[\s\S]*add_acceptance_criterion[\s\S]*Weiter bei 3\. Querschnittsthemen/,
+      /set_description[\s\S]*Nach Beschreibung-Bestätigung einmal[\s\S]*Backbone vorschlagen\/bestätigen[\s\S]*geordnete user activities[\s\S]*create_node kind=activity[\s\S]*walking skeleton über alle user activities[\s\S]*je activity, slice[\s\S]*Liste vor create_node kind=story bestätigen[\s\S]*add_acceptance_criterion[\s\S]*Dann 3\./,
     );
     expect(INTERVIEW_PROMPT.match(/Eine story map kann später ergänzt werden\./g)).toHaveLength(1);
     expect(INTERVIEW_PROMPT).toMatch(/kann später ergänzt werden[\s\S]*2\. Erste Features[\s\S]*Given \.\.\.[\s\S]*cross_cutting[\s\S]*define_term[\s\S]*approve_tree/);
@@ -38,6 +38,23 @@ describe("AT-5 AT-15 Geführtes Onboarding und Projekt-Interview", () => {
     const existingFlow = INTERVIEW_PROMPT.slice(INTERVIEW_PROMPT.lastIndexOf("2. Erste Features"));
     expect(createHash("sha256").update(existingFlow).digest("hex"))
       .toBe("4e46ee4c127b2da622b6ce62f1376bac2f570b2c1ab27bec418717522a42cd46");
+    expect(createHash("sha256").update(ONBOARDING_PROMPT).digest("hex"))
+      .toBe("3b9355508cad553fd31504add276881f6bf08b4d3b66d11cf705469c5f9f4919");
+  });
+
+  it("AT-40 approvt Interview-Activities vor erster Platzierung", () => {
+    expect(INTERVIEW_PROMPT).toMatch(
+      /create_node kind=activity[\s\S]*Jede neue activity: get_node[\s\S]*approve mit dessen content_hash[\s\S]*danach erst placement via set_map_position\/create_node/,
+    );
+  });
+
+  it("AT-42 repariert benannte stale Activity und retried einmal", () => {
+    expect(INTERVIEW_PROMPT).toMatch(
+      /Benannte unapproved\/stale activity:[\s\S]*get_node[\s\S]*approve mit dessen content_hash[\s\S]*Placement einmal wiederholen, Folgefehler melden; nie blind/,
+    );
+  });
+
+  it("AT-43 hält Onboarding-Prompt byte-identisch", () => {
     expect(createHash("sha256").update(ONBOARDING_PROMPT).digest("hex"))
       .toBe("3b9355508cad553fd31504add276881f6bf08b4d3b66d11cf705469c5f9f4919");
   });

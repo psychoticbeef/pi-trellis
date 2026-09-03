@@ -76,6 +76,32 @@ describe("US-21 Feature-Dialog mit placement proposals", () => {
     expect(mapped.harness.userMessages[0]).not.toContain(STORY_MAP_RETROFIT_NOTICE);
   });
 
+  it("AT-41 IT-24 approvt neue oder bearbeitete Activity vor Placement", async () => {
+    const { harness, run } = await runningStoryCommand(async () => ({
+      story_map: { groups: [], gaps: [] },
+      stories: [],
+    }));
+
+    await run("Neue Aktivität plus Story");
+
+    expect(String(harness.userMessages[0])).toMatch(
+      /create_node kind=activity[\s\S]*update_node[\s\S]*get_node[\s\S]*approve mit zurückgegebenem content_hash[\s\S]*Erst danach[\s\S]*set_map_position[\s\S]*create_node mit activity und slice/,
+    );
+  });
+
+  it("AT-42 IT-24 repariert benannte stale Activity und retried Placement einmal", async () => {
+    const { harness, run } = await runningStoryCommand(async () => ({
+      story_map: { groups: [], gaps: [] },
+      stories: [],
+    }));
+
+    await run("Suche");
+
+    expect(String(harness.userMessages[0])).toMatch(
+      /benannter unapproved oder stale activity[\s\S]*genau diese activity mit get_node[\s\S]*approve sie mit aktueller content_hash[\s\S]*placement-Aufruf genau einmal[\s\S]*Bei erneutem Fehler stoppen; nie blind wiederholen/,
+    );
+  });
+
   it("AT-39 IT-22 wandelt Placement-Gate-Kandidaten in Auswahl um statt blindem Retry", async () => {
     const { harness, run } = await runningStoryCommand(async () => ({
       story_map: { groups: [], gaps: [] },
@@ -86,7 +112,7 @@ describe("US-21 Feature-Dialog mit placement proposals", () => {
 
     const prompt = String(harness.userMessages[0]);
     expect(prompt).toMatch(
-      /Placement-Gate-Fehler[\s\S]*Kandidaten[\s\S]*create_node nicht erneut[\s\S]*nummerierte placement proposals[\s\S]*nenne gaps[\s\S]*warte auf neue User-Auswahl/,
+      /Placement-Gate-Fehler[\s\S]*andere Kandidaten[\s\S]*create_node nicht erneut[\s\S]*nummerierte placement proposals[\s\S]*nenne gaps[\s\S]*warte auf neue User-Auswahl/,
     );
     expect(prompt).toMatch(/Erst danach[\s\S]*create_node kind=story[\s\S]*gewählter activity und slice/);
   });
