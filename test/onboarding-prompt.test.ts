@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { INTERVIEW_PROMPT } from "../src/init-prompt.js";
 import { ONBOARDING_INTERVIEW_PROMPT, ONBOARDING_PROMPT } from "../src/onboarding-prompt.js";
@@ -49,7 +50,15 @@ describe("UT-27 Sicherer Onboarding-Prompt und Gate-Rezepte", () => {
     expect(ONBOARDING_PROMPT).toMatch(/trellis config[\s\S]*Shell-CLI[\s\S]*niemals über MCP/);
     expect(ONBOARDING_PROMPT).toContain("trellis doctor");
     expect(ONBOARDING_INTERVIEW_PROMPT.endsWith(INTERVIEW_PROMPT)).toBe(true);
-    expect(ONBOARDING_INTERVIEW_PROMPT.match(/Du führst mit dem User ein strukturiertes Trellis-Projekt-Interview/g))
+    expect(ONBOARDING_INTERVIEW_PROMPT.match(/Strukturiertes Trellis-Projekt-Interview/g))
+      .toHaveLength(1);
+  });
+
+  it("UT-46 AT-36 hält ONBOARDING_PROMPT byte-identisch und komponiert Interview einmal", () => {
+    expect(createHash("sha256").update(ONBOARDING_PROMPT).digest("hex"))
+      .toBe("3b9355508cad553fd31504add276881f6bf08b4d3b66d11cf705469c5f9f4919");
+    expect(ONBOARDING_INTERVIEW_PROMPT.endsWith(INTERVIEW_PROMPT)).toBe(true);
+    expect(ONBOARDING_INTERVIEW_PROMPT.match(/Strukturiertes Trellis-Projekt-Interview/g))
       .toHaveLength(1);
   });
 });
