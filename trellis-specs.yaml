@@ -18,6 +18,8 @@ glossary:
       definition: Projektlokales automatisches Laden der Extension durch pi.
     - term: Auto-Modus
       definition: Sitzungsmodus, der startbare Stories nacheinander bis done bearbeitet.
+    - term: Backbone
+      definition: Geordnete user activities einer story map.
     - term: Board-Adresse
       definition: Konfigurierbare Live-Board-Basisadresse; Standard http://127.0.0.1:7420.
     - term: Branch-Gate-Hook
@@ -32,6 +34,8 @@ glossary:
       definition: Parallele Prüfung durch drei Qualitätsagenten.
     - term: Fail-open
       definition: Warnendes Durchlassen von finish nach drei Blockierungen.
+    - term: gaps
+      definition: Unbesetzte activity/slice-Bereiche einer story map.
     - term: Gate-Rezept
       definition: Stackbezogene CLI-Konfiguration für Lint, Tests und Coverage.
     - term: Interview-Prompt
@@ -40,6 +44,8 @@ glossary:
       definition: UI-only Übersicht über Story-Zähler, aktive Arbeit und Risiken.
     - term: Legacy-Fallback
       definition: Nicht kategorisierbare Usage als totalTokens-Gesamtwert.
+    - term: map line
+      definition: One compact context-block line summarizing the story map; absent without a map.
     - term: Nutzer-Override
       definition: Projektlokales Subagent-Rezept mit Vorrang vor der globalen Datei.
     - term: Onboarding-Modus
@@ -56,6 +62,12 @@ glossary:
       definition: Gemeinsamer Extension-Event-Bus eines laufenden pi-Prozesses.
     - term: pi-subagents-Record
       definition: Lifecycle-Event completed oder failed mit Subagent-Usage.
+    - term: placement
+      definition: Zuordnung einer Story zu activity und slice.
+    - term: placement proposal
+      definition: Numbered options (activity, slice, split) the agent offers before creating a story.
+    - term: Placement-Gate
+      definition: Validierung gegen Story-Erstellung ohne gültiges placement.
     - term: Projekt-Skeleton
       definition: Minimale initiale Datei- und Verzeichnisstruktur.
     - term: Reliktsuche
@@ -68,6 +80,8 @@ glossary:
       definition: Über .pi/settings.json geladene projektlokale Extension.
     - term: Statusline-Eintrag
       definition: Dezente aktuelle Anzeige der laufenden Story und ihrer Gates.
+    - term: story map
+      definition: 'Optional trellis 2D view: activities left to right, stories below, slices across.'
     - term: Story-Fenster
       definition: Turns vom erfolgreichen start bis einschließlich erfolgreichen finish einer Story.
     - term: Subagent-Rezept
@@ -84,19 +98,23 @@ glossary:
       definition: Von get_overview gelieferte Projektübersicht.
     - term: Usage-Delta
       definition: Seit letzter erfolgreicher Meldung neu zugeordnete Token-Usage.
+    - term: user activities
+      definition: Aktivitätsknoten einer story map.
     - term: Vorab-Commit
       definition: Vollständiger Projekt-Commit unmittelbar vor trellis init.
+    - term: walking skeleton
+      definition: Erste Stories über alle bestätigten user activities.
     - term: Worktree-Pfad
       definition: Pfad des einer Story zugeordneten Worktrees.
     - term: Änderungsreview
       definition: Read-only Architekturprüfung großer Änderungen.
 counters:
-    AS: 18
-    AT: 32
-    DD: 42
-    IT: 18
-    US: 18
-    UT: 42
+    AS: 22
+    AT: 43
+    DD: 50
+    IT: 24
+    US: 22
+    UT: 50
     ac:US-1: 4
     ac:US-2: 4
     ac:US-3: 4
@@ -115,6 +133,10 @@ counters:
     ac:US-16: 8
     ac:US-17: 8
     ac:US-18: 7
+    ac:US-19: 3
+    ac:US-20: 4
+    ac:US-21: 4
+    ac:US-22: 4
 stories:
     - id: US-1
       kind: story
@@ -508,7 +530,7 @@ stories:
     - id: US-5
       kind: story
       title: Geführtes Projekt-Interview über /trellis:init
-      body: Der Slash-Command /trellis:init wählt anhand der Trellis-Verdrahtung zwischen Onboarding-Prompt und dem im Code hinterlegten Interview-Prompt. Der unveränderte Interview-Prompt führt das LLM schrittweise durch Projektbeschreibung, bestätigte Story-Vorschläge mit Given/When/Then-Akzeptanzkriterien, Querschnittsthemen, Glossar-Grundstock sowie abschließendes approve_tree und Refinement.
+      body: Der Slash-Command /trellis:init wählt anhand der Trellis-Verdrahtung zwischen Onboarding-Prompt und dem im Code hinterlegten Interview-Prompt. Der Interview-Prompt führt das LLM schrittweise durch Projektbeschreibung, eine optionale story map mit bestätigtem Backbone und walking skeleton oder den bisherigen Story-Vorschlag mit Given/When/Then-Akzeptanzkriterien, Querschnittsthemen, Glossar-Grundstock sowie abschließendes approve_tree und Refinement.
       status: done
       paths:
         - src/init-prompt.ts
@@ -533,26 +555,26 @@ stories:
         - id: US-5.AC-3
           given: Der Interview-Prompt wurde injiziert.
           when: Das LLM das Projekt-Interview durchführt.
-          then: Es erarbeitet schrittweise mit dem User die Projektbeschreibung, schlägt anschließend 2–3 erste Stories mit Given/When/Then-Akzeptanzkriterien vor und legt sie erst nach ausdrücklicher Bestätigung an; danach erarbeitet es Querschnittsthemen als cross_cutting Specs und einen ultra-kurzen Glossar-Grundstock.
+          then: Es erarbeitet schrittweise mit dem User die Projektbeschreibung und fragt danach einmal nach einer story map. Im Ja-Zweig erstellt es bestätigte user activities und 2–3 erste Stories als walking skeleton mit Given/When/Then-Akzeptanzkriterien; im Nein-Zweig schlägt es die bisherigen 2–3 ersten Stories mit solchen Kriterien vor. Es legt Stories erst nach ausdrücklicher Bestätigung an und erarbeitet danach cross_cutting Specs und einen ultra-kurzen Glossar-Grundstock.
         - id: US-5.AC-4
           given: Der User hat die vorgeschlagenen Inhalte bestätigt und die Spec-Bäume wurden angelegt.
           when: Das Interview abgeschlossen wird.
           then: Der Interview-Prompt weist das LLM abschließend an, die vollständigen Bäume zu lesen, sie mit aktuellen Hashes via approve_tree zu approven und die Stories nach erfolgreicher Prüfung zu refinen.
-      approved_content_hash: 26f5d5c339b187b6c548d12a127aadd8999f877850609a9854187f1422d06953
+      approved_content_hash: b2b94f49d523996925f34b45d3541d0668bd92b62ea81415f9c2ccb03d6d8182
       children:
         - id: AS-5
           kind: arch
           title: Slash-Command mit zustandsabhängigem Interview-Prompt
-          body: Die TypeScript-pi-Extension exportiert einen statischen Interview-Prompt aus einem eigenen Modul und registriert /trellis:init neben den bestehenden Commands. Der Handler prüft die Trellis-Verdrahtung über die Projektfindung statt den In-Memory-Aktivierungszustand des Trellis-Modus. Ohne gültige trellis-project-Zeile sendet er genau eine Komposition aus Onboarding-Prompt und Interview-Prompt; mit gültiger Zeile übergibt er den Interview-Prompt genau einmal als String an pi.sendUserMessage. Der Interview-Prompt bleibt unter 2500 Zeichen und instruiert das LLM zu einem schrittweisen, bestätigungsgebundenen Trellis-Projekt-Interview einschließlich set_description, 2–3 Story-Vorschlägen mit Given/When/Then-Akzeptanzkriterien, cross_cutting Specs, ultra-kurzem Glossar-Grundstock, get_tree, approve_tree und Refinement. Unit-, Integrations- und Acceptance-Tests sichern Inhalt und Verdrahtung.
-          approved_content_hash: 9185c6e253bedc3fc3b11ae0b84daa99bc4e228b34577b5027d23b28a02ce83a
-          approved_parent_hash: 26f5d5c339b187b6c548d12a127aadd8999f877850609a9854187f1422d06953
+          body: Die TypeScript-pi-Extension exportiert einen statischen Interview-Prompt aus einem eigenen Modul und registriert /trellis:init neben den bestehenden Commands. Der Handler prüft die Trellis-Verdrahtung über die Projektfindung statt den In-Memory-Aktivierungszustand des Trellis-Modus. Ohne gültige trellis-project-Zeile sendet er genau eine Komposition aus Onboarding-Prompt und Interview-Prompt; mit gültiger Zeile übergibt er den Interview-Prompt genau einmal als String an pi.sendUserMessage. Der Interview-Prompt bleibt unter 2500 Zeichen und instruiert das LLM zu einem schrittweisen, bestätigungsgebundenen Trellis-Projekt-Interview einschließlich set_description, optionaler story map mit Backbone, user activities, walking skeleton und placement, alternativ 2–3 Story-Vorschlägen mit Given/When/Then-Akzeptanzkriterien, cross_cutting Specs, ultra-kurzem Glossar-Grundstock, get_tree, approve_tree und Refinement. Unit-, Integrations- und Acceptance-Tests sichern Inhalt und Verdrahtung.
+          approved_content_hash: 88a6608ce601c31a91ac5e1c1bedb1a26469aaf9592a4df618a71c8a9a8b1910
+          approved_parent_hash: b2b94f49d523996925f34b45d3541d0668bd92b62ea81415f9c2ccb03d6d8182
           children:
             - id: DD-10
               kind: detail_design
               title: Zustandsabhängiger init-Command
               body: src/index.ts registriert trellis:init mit einer knappen Beschreibung. Der Handler verwendet findTrellisProject für das aktuelle Arbeitsverzeichnis. Ohne gültige trellis-project-Zeile ruft er pi.sendUserMessage mit der Onboarding-/Interview-Komposition genau einmal auf. Mit gültiger Verdrahtung ruft er pi.sendUserMessage(INTERVIEW_PROMPT) genau einmal auf. Er führt selbst keine Trellis-Mutationen aus; diese bleiben Aufgabe des durch die Prompts angeleiteten LLM.
               approved_content_hash: 88cecec71aa56247e4b86dc4a31530bddd0b72e0221c81bc8c8843b92e3e725b
-              approved_parent_hash: 9185c6e253bedc3fc3b11ae0b84daa99bc4e228b34577b5027d23b28a02ce83a
+              approved_parent_hash: 88a6608ce601c31a91ac5e1c1bedb1a26469aaf9592a4df618a71c8a9a8b1910
               children:
                 - id: UT-10
                   kind: unit_test
@@ -568,16 +590,16 @@ stories:
             - id: DD-9
               kind: detail_design
               title: Interview-Prompt als testbares Template
-              body: 'src/init-prompt.ts exportiert den unveränderlichen String INTERVIEW_PROMPT. Er benennt das geführte Vorgehen in klaren Schritten: Projektbeschreibung mit set_description; Vorschlag von 2–3 Stories samt Given/When/Then-Akzeptanzkriterien vor jeder Anlage; Querschnittsthemen als cross_cutting Specs; ultra-kurzer Glossar-Grundstock; abschließend vollständige Bäume per get_tree lesen, mit aktuellen Hashes via approve_tree approven und danach refinen. Der Text fordert Rückfragen und ausdrückliche User-Bestätigung vor dem Anlegen und hat weniger als 2500 JavaScript-Zeichen.'
-              approved_content_hash: 08d4000516abe2a36aee749ac8e335cdec640bdae0f10a71161abef2d211c9e6
-              approved_parent_hash: 9185c6e253bedc3fc3b11ae0b84daa99bc4e228b34577b5027d23b28a02ce83a
+              body: 'src/init-prompt.ts exportiert den unveränderlichen String INTERVIEW_PROMPT. Er benennt das geführte Vorgehen in klaren Schritten: Projektbeschreibung mit set_description; danach einmalige Entscheidung über eine story map; im Ja-Zweig bestätigter Backbone, user activities in Reihenfolge und 2–3 Stories als bestätigter walking skeleton mit activity, slice und Given/When/Then-Akzeptanzkriterien; im Nein-Zweig der bisherige Vorschlag von 2–3 Stories samt Kriterien vor jeder Anlage; danach Querschnittsthemen als cross_cutting Specs, ultra-kurzer Glossar-Grundstock sowie get_tree, approve_tree und Refinement. Der Text fordert Rückfragen und ausdrückliche User-Bestätigung vor dem Anlegen und hat weniger als 2500 JavaScript-Zeichen.'
+              approved_content_hash: d1ed4f34d107ecf60a3cb4d71646bc69ddde0a99bc7ddb186334d2803efedda7
+              approved_parent_hash: 88a6608ce601c31a91ac5e1c1bedb1a26469aaf9592a4df618a71c8a9a8b1910
               children:
                 - id: UT-9
                   kind: unit_test
                   title: UT-9 Längenlimit und Pflichtbausteine des Interview-Prompts
                   body: Unit-Tests importieren INTERVIEW_PROMPT und prüfen weniger als 2500 Zeichen sowie die Pflichtbausteine set_description, 2–3 Stories, Given/When/Then, ausdrückliche Bestätigung vor Anlage, cross_cutting, Glossar, get_tree, approve_tree und refine. Jeder Testname enthält UT-9.
                   approved_content_hash: f54db0fc3857b671e3ff4ec01973240b69d6362fcf8989ed087ae72e2e62619d
-                  approved_parent_hash: 08d4000516abe2a36aee749ac8e335cdec640bdae0f10a71161abef2d211c9e6
+                  approved_parent_hash: d1ed4f34d107ecf60a3cb4d71646bc69ddde0a99bc7ddb186334d2803efedda7
                   evidence:
                     tests:
                         - test/init-prompt.test.ts::UT-9 Längenlimit und Pflichtbausteine des Interview-Prompts > UT-9 bleibt unter 2500 Zeichen
@@ -588,7 +610,7 @@ stories:
               title: IT-5 Zustandserkennung und init-Command im pi-Harness
               body: 'Eine Integration-Suite führt trellis:init in einem verdrahteten und einem unverdrahteten temporären Projekt aus. Am pi-Harness beobachtet sie jeweils genau eine durch pi.sendUserMessage ausgelöste User-Nachricht: INTERVIEW_PROMPT bei gültiger trellis-project-Zeile und die Onboarding-/Interview-Komposition ohne Verdrahtung. Der Testname enthält IT-5.'
               approved_content_hash: e3ed4057df5a2775a58552f68a2cec7a0264b79f29e73d1d5eb8494f463fb58d
-              approved_parent_hash: 9185c6e253bedc3fc3b11ae0b84daa99bc4e228b34577b5027d23b28a02ce83a
+              approved_parent_hash: 88a6608ce601c31a91ac5e1c1bedb1a26469aaf9592a4df618a71c8a9a8b1910
               evidence:
                 tests:
                     - test/integration-init.test.ts::IT-5 Aktivierung und init-Command im Pi-Harness > IT-5 sendet den Interview-Prompt ausschließlich nach erfolgreicher Aktivierung
@@ -596,14 +618,14 @@ stories:
         - id: AT-5
           kind: acceptance_test
           title: AT-5 Zustandsabhängiges geführtes Projekt-Interview
-          body: Eine Black-box-Suite registriert die Extension an einem pi-Harness. Sie prüft, dass /trellis:init ohne gültige trellis-project-Zeile genau eine Onboarding-/Interview-Komposition und mit gültiger Verdrahtung genau den unveränderten Interview-Prompt via pi.sendUserMessage sendet. Der Interview-Prompt bleibt unter 2500 Zeichen und enthält alle Schritte bis approve_tree und Refinement. Der Testname enthält AT-5.
+          body: Eine Black-box-Suite registriert die Extension an einem pi-Harness. Sie prüft, dass /trellis:init ohne gültige trellis-project-Zeile genau eine Onboarding-/Interview-Komposition und mit gültiger Verdrahtung genau den Interview-Prompt via pi.sendUserMessage sendet. Der Interview-Prompt bleibt unter 2500 Zeichen und enthält alle US-5-Basisschritte bis approve_tree und Refinement; AT-35 und AT-36 decken den optionalen story map-Zweig ab. Der Testname enthält AT-5.
           covers:
             - US-5.AC-1
             - US-5.AC-2
             - US-5.AC-3
             - US-5.AC-4
-          approved_content_hash: 460092b2eb31548b11b0b01a02f18abbd5558253875bcffe5ac62f6003ddb48a
-          approved_parent_hash: 26f5d5c339b187b6c548d12a127aadd8999f877850609a9854187f1422d06953
+          approved_content_hash: d8115f087274c5f9314fe71b76a0768d8b2d39d61e80a3f596d3c0d8851f49e9
+          approved_parent_hash: b2b94f49d523996925f34b45d3541d0668bd92b62ea81415f9c2ccb03d6d8182
           evidence:
             tests:
                 - test/acceptance-init.test.ts::AT-5 Geführtes Projekt-Interview über den Slash-Command > AT-5 erfüllt Modus-Guard, Einzelinjektion, Längenlimit und Interview-Abschluss
@@ -2375,3 +2397,503 @@ stories:
             tests:
                 - test/acceptance-token-usage.test.ts::US-18 Kategorisierte Token-Usage > AT-32 IT-18 behält Token-Usage-Attribution über Trellis-Overview und Deduplizierung
             recorded_at: "2026-09-01T20:14:47Z"
+    - id: US-19
+      kind: story
+      title: Map line in context block
+      body: 'The trellis context block gains one line derived from get_overview''s map section: each activity with done/total for the lowest slice that still has open stories, followed by the unmapped count. Absent without a map. The whole block stays under the existing 1500 character limit; the line is truncated with the existing summarize/clip helpers.'
+      status: done
+      paths:
+        - src/context.ts
+        - test/context.test.ts
+        - test/acceptance-story-map-context.test.ts
+      acceptance_criteria:
+        - id: US-19.AC-1
+          given: get_overview reports a story map
+          when: the context block is built
+          then: one map line shows every activity in position order with done/total of the lowest open slice and the unmapped count, and the block stays under 1500 characters.
+        - id: US-19.AC-2
+          given: get_overview reports no story map
+          when: the context block is built
+          then: the block is byte-identical to the current output.
+        - id: US-19.AC-3
+          given: the map line would exceed its budget
+          when: the context block is built
+          then: it is clipped with the existing omission marker and never throws.
+      approved_content_hash: 0b0d6a7839028eaa2210d2d5c62d8191de7e0fcd5773a7da64fa8a445f9fdd07
+      children:
+        - id: AS-19
+          kind: arch
+          title: Optionale story map-Projektion im begrenzten Trellis-Kontextblock
+          body: 'src/context.ts erweitert TrellisOverview um optionale story_map-Strukturen passend zur get_overview-JSON-Form aus trellis: status, unmapped_story_ids, groups mit activity, unmapped, stories und slice_progress sowie gaps; activities bleibt optional verfügbar. formatTrellisContext leitet nur bei vorhandenem story_map eine kompakte map line ab. Aktivitätsgruppen bleiben in gelieferter Positionsreihenfolge. Je Aktivität wird der erste Slice mit done < total angezeigt; fehlt ein offener Slice, dient der letzte gemeldete Slice als abgeschlossener Fallback, bei fehlendem slice_progress 0/0. Danach folgt Anzahl aus unmapped_story_ids. Bestehende summarize- und clip-Helfer begrenzen Einträge und Zeile so, dass gesamter Trellis-Kontextblock strikt unter 1500 Zeichen bleibt und nicht wirft. Ohne story_map wird exakt bisheriger Renderpfad samt Bytefolge verwendet. Betroffene Tests liegen in test/context.test.ts und einer acceptance-Suite.'
+          approved_content_hash: dcdde688e6ae9da6578630915369b63524552ce871c68c7184ffdd1517465f64
+          approved_parent_hash: 0b0d6a7839028eaa2210d2d5c62d8191de7e0fcd5773a7da64fa8a445f9fdd07
+          children:
+            - id: DD-43
+              kind: detail_design
+              title: story_map typisieren und map line ableiten
+              body: Optionale TypeScript-Interfaces spiegeln ActivitySummary, SliceProgress, StoryMapGroup und StoryMapOverview tolerant gegen fehlende Teilfelder. Eine reine Formatierung verwirft unmapped-Gruppen aus Aktivitätsausgabe, erhält Reihenfolge der activity-Gruppen, normalisiert Titel kompakt und wählt je Gruppe ersten slice_progress-Eintrag mit done < total. Ohne solchen Eintrag nutzt sie letzten vorhandenen Fortschritt, ohne Fortschritt 0/0. unmapped_story_ids.length liefert unmapped-Zähler; status, stories, gaps und activities bleiben parsebar, steuern Zähler aber nicht doppelt.
+              approved_content_hash: 475c0c93eff8da524c024bfacd161e64de56093400e62c2bafa6e6d3bdb2a578
+              approved_parent_hash: dcdde688e6ae9da6578630915369b63524552ce871c68c7184ffdd1517465f64
+              children:
+                - id: UT-43
+                  kind: unit_test
+                  title: Reihenfolge, Slice-Auswahl und unmapped-Zähler der map line
+                  body: Unit-Tests prüfen activity-Reihenfolge, niedrigsten offenen Slice, abgeschlossenen und leeren Fallback, ignorierte unmapped-Gruppe, 0 bis viele unmapped_story_ids sowie tolerante fehlende Felder. Jeder Testname enthält ID dieses unit_test.
+                  approved_content_hash: d97cfac1334befd0f0db71e60d180c6a99e07c60bbdf52cc97099d314a5ad0b1
+                  approved_parent_hash: 475c0c93eff8da524c024bfacd161e64de56093400e62c2bafa6e6d3bdb2a578
+                  evidence:
+                    tests:
+                        - test/context.test.ts::UT-43 story map formatieren > UT-43 erhält Aktivitätsreihenfolge, wählt niedrigsten offenen Slice und zählt unmapped
+                        - test/context.test.ts::UT-43 story map formatieren > UT-43 toleriert partielle story_map-Felder
+                    recorded_at: "2026-09-03T16:09:21Z"
+            - id: DD-44
+              kind: detail_design
+              title: Bedingte Zeile und festes 1500-Zeichen-Budget
+              body: formatTrellisContext fügt map line ausschließlich bei eigenem story_map-Property ein. Einträge werden mit bestehendem summarize samt Auslassungsmarker verdichtet; bestehendes clip begrenzt finale Zeile innerhalb eines festen Teilbudgets. Teilbudget hält Summe aller bestehenden Maxima, Überschriften und Zeilenumbrüche strikt unter MAX_CONTEXT_LENGTH. Ohne story_map bleibt Array-Zusammensetzung unverändert, wodurch Ausgabe byte-identisch bleibt; überlange oder fehlerhaft partielle Map-Daten führen nie zum bestehenden Längenfehler.
+              approved_content_hash: d1f092200abe15e10ed5cc24952fe46a8c3333771da980507d12bbb5d26d00f8
+              approved_parent_hash: dcdde688e6ae9da6578630915369b63524552ce871c68c7184ffdd1517465f64
+              children:
+                - id: UT-44
+                  kind: unit_test
+                  title: No-map-Identität, Auslassungsmarker und Grenzlänge
+                  body: Unit-Tests frieren bisherigen Kontextblock ohne story_map als exakte Zeichenfolge ein und prüfen identische Bytes. Extrem lange Aktivitätstitel und viele Gruppen erzeugen deterministisch bestehenden Auslassungsmarker, Ergebnis kleiner als MAX_CONTEXT_LENGTH und keinen Throw. Jeder Testname enthält ID dieses unit_test.
+                  approved_content_hash: 40bf79991b188889c9d87c53ec3e583f48b75c03f6fbc7aa56e03ec30482540a
+                  approved_parent_hash: d1f092200abe15e10ed5cc24952fe46a8c3333771da980507d12bbb5d26d00f8
+                  evidence:
+                    tests:
+                        - test/context.test.ts::UT-44 bedingte map line und Kontextbudget > UT-44 hält Ausgabe ohne story_map byte-identisch
+                        - test/context.test.ts::UT-44 bedingte map line und Kontextbudget > UT-44 clippt lange map line mit bestehendem Auslassungsmarker ohne Throw
+                    recorded_at: "2026-09-03T16:09:21Z"
+            - id: IT-19
+              kind: integration_test
+              title: get_overview-JSON bis Trellis-Kontextblock integrieren
+              body: Integrationstests führen realistische get_overview-Objekte mit story_map durch Overview-Aktualisierung und Kontextinjektion. Sie prüfen Gruppenreihenfolge, Auswahl niedrigster offener Slices, unmapped-Anzahl, lange Daten, deterministische Begrenzung und unveränderten Pfad bei fehlendem story_map. Testnamen enthalten ID dieses integration_test.
+              approved_content_hash: 535b8097f1a630595a4e10a415ec26310e30b8285efb607631322399d1957a7e
+              approved_parent_hash: dcdde688e6ae9da6578630915369b63524552ce871c68c7184ffdd1517465f64
+              evidence:
+                tests:
+                    - test/acceptance-story-map-context.test.ts::US-19 map line im Trellis-Kontextblock > AT-33 IT-19 zeigt Positionsreihenfolge, niedrigsten offenen Slice und unmapped-Anzahl
+                    - test/acceptance-story-map-context.test.ts::US-19 map line im Trellis-Kontextblock > AT-34 IT-19 hält bisherigen Block ohne story_map byte-identisch
+                    - test/acceptance-story-map-context.test.ts::US-19 map line im Trellis-Kontextblock > AT-33 IT-19 begrenzt überlange map line deterministisch
+                recorded_at: "2026-09-03T16:09:21Z"
+        - id: AT-33
+          kind: acceptance_test
+          title: Map line für vorhandene story map bleibt vollständig und begrenzt
+          body: Black-box-Tests speisen get_overview-Antworten mit activity-Gruppen in Positionsreihenfolge, slice_progress, unmapped_story_ids und langen Titeln ein. Sie prüfen genau eine map line mit done/total des jeweils niedrigsten offenen Slice je Aktivität, unmapped-Anzahl, bestehendem Auslassungsmarker und Gesamtlänge unter 1500 Zeichen. Vollständig abgeschlossene oder leere Aktivitätsgruppen erhalten den spezifizierten deterministischen Fallback. Testnamen enthalten ID dieses acceptance_test.
+          covers:
+            - US-19.AC-1
+            - US-19.AC-3
+          approved_content_hash: a70b1556a5df3250eec759f0ca4af683950b1981c14191045d0ccbc7a198d170
+          approved_parent_hash: 0b0d6a7839028eaa2210d2d5c62d8191de7e0fcd5773a7da64fa8a445f9fdd07
+          evidence:
+            tests:
+                - test/acceptance-story-map-context.test.ts::US-19 map line im Trellis-Kontextblock > AT-33 IT-19 zeigt Positionsreihenfolge, niedrigsten offenen Slice und unmapped-Anzahl
+                - test/acceptance-story-map-context.test.ts::US-19 map line im Trellis-Kontextblock > AT-33 IT-19 begrenzt überlange map line deterministisch
+            recorded_at: "2026-09-03T16:09:21Z"
+        - id: AT-34
+          kind: acceptance_test
+          title: Kontextblock ohne story map bleibt byte-identisch
+          body: Golden-Tests rendern dieselben Trellis-Overview-Daten ohne story_map vor und nach Erweiterung und vergleichen vollständige Bytes einschließlich Zeilenfolge, Trennzeichen und Abschluss. Testnamen enthalten ID dieses acceptance_test.
+          covers:
+            - US-19.AC-2
+          approved_content_hash: a95a493360c6a130469b1f0798f9137cb9bebac334199270e80d0be6569ea8ce
+          approved_parent_hash: 0b0d6a7839028eaa2210d2d5c62d8191de7e0fcd5773a7da64fa8a445f9fdd07
+          evidence:
+            tests:
+                - test/acceptance-story-map-context.test.ts::US-19 map line im Trellis-Kontextblock > AT-34 IT-19 hält bisherigen Block ohne story_map byte-identisch
+            recorded_at: "2026-09-03T16:09:21Z"
+    - id: US-20
+      kind: story
+      title: Interview offers a story map
+      body: The project interview (INTERVIEW_PROMPT) asks once, after the description is confirmed, whether the product has several user activities. On yes it drafts a backbone, confirms it, creates activities, and derives the first stories as walking skeleton across all activities with placement. On no it continues unchanged and mentions once that a story map can be added later. The onboarding prompt (ONBOARDING_PROMPT) stays unchanged.
+      status: done
+      paths:
+        - src/init-prompt.ts
+        - test/acceptance-init.test.ts
+        - test/init-prompt.test.ts
+        - test/integration-init.test.ts
+        - test/onboarding-prompt.test.ts
+      acceptance_criteria:
+        - id: US-20.AC-1
+          given: the description step is confirmed
+          when: the interview continues
+          then: it asks exactly once whether the project has several user activities and offers a backbone draft.
+        - id: US-20.AC-2
+          given: the user accepts the backbone
+          when: activities are confirmed
+          then: the interview creates them via create_node kind=activity and proposes the first stories as walking skeleton with a placement per story before creating any story.
+        - id: US-20.AC-3
+          given: the user declines
+          when: the interview continues
+          then: the existing flow runs unchanged with one sentence on later retrofit.
+        - id: US-20.AC-4
+          given: the onboarding prompt
+          when: compared to the current text
+          then: it is unchanged.
+      approved_content_hash: c86a942499f58c9236c1e0a3998a52b71765e9fe718d466c388cfa57c93b2ffe
+      children:
+        - id: AS-20
+          kind: arch
+          title: Bestätigungsgebundener story map-Zweig nur im Interview-Prompt
+          body: Nur src/init-prompt.ts ändert INTERVIEW_PROMPT. Direkt nach bestätigter Projektbeschreibung erhält er eine einmalige Entscheidung über mehrere user activities. Ja-Zweig entwirft und bestätigt Backbone, erstellt bestätigte Aktivitäten in Positionsreihenfolge über create_node kind=activity und entwirft danach erste Stories als walking skeleton über alle Aktivitäten; jede Story enthält activity und slice als placement und alle Story-Vorschläge werden vor erstem create_node kind=story bestätigt. Nein-Zweig nennt einmal spätere Nachrüstung einer story map und setzt bisherigen Interviewablauf unverändert fort. src/onboarding-prompt.ts und exportierter ONBOARDING_PROMPT bleiben byte-identisch; bestehende Komposition importiert weiterhin INTERVIEW_PROMPT. Tests erweitern test/init-prompt.test.ts, test/onboarding-prompt.test.ts und init-Integration/Acceptance-Suites.
+          approved_content_hash: 8e4f91c2307abafc16bb2d486cffe9a31ca3b8f676cc118ccb5aeab70b37f32f
+          approved_parent_hash: c86a942499f58c9236c1e0a3998a52b71765e9fe718d466c388cfa57c93b2ffe
+          children:
+            - id: DD-45
+              kind: detail_design
+              title: Einmalige Aktivitätsfrage und bestätigter Ja-Zweig
+              body: INTERVIEW_PROMPT fügt nach set_description einen klar abgegrenzten Schritt ein. Er fragt genau einmal nach mehreren user activities. Bei Ja schlägt Agent zuerst geordneten Backbone vor, wartet auf ausdrückliche Bestätigung und ruft erst dann create_node mit kind=activity je Aktivität auf. Danach entwirft er 2–3 erste Stories als walking skeleton mit Abdeckung aller bestätigten Aktivitäten und nennt für jede activity sowie slice. Vollständige Story-Liste samt placement muss bestätigt sein, bevor irgendein create_node kind=story erfolgt; add_acceptance_criterion folgt bestehender Regel.
+              approved_content_hash: e5fe8220ca3e48c5333b6dcc42b6ce043807399e31807be7f844fae6c0ec1904
+              approved_parent_hash: 8e4f91c2307abafc16bb2d486cffe9a31ca3b8f676cc118ccb5aeab70b37f32f
+              children:
+                - id: UT-45
+                  kind: unit_test
+                  title: Reihenfolge und Erstellungs-Gates des Ja-Zweigs
+                  body: Unit-Tests prüfen Textreihenfolge Beschreibung bestätigen, Aktivitätsfrage, Backbone-Vorschlag, Backbone-Bestätigung, create_node kind=activity, walking skeleton, activity/slice-placement, gemeinsame Story-Bestätigung und erst danach create_node kind=story. Frage erscheint genau einmal. Jeder Testname enthält ID dieses unit_test.
+                  approved_content_hash: 34413bbb1b1c3103cd42472e150c6d6d61c092e5053f58b490cd3dd5a0ff3ccf
+                  approved_parent_hash: e5fe8220ca3e48c5333b6dcc42b6ce043807399e31807be7f844fae6c0ec1904
+                  evidence:
+                    tests:
+                        - test/init-prompt.test.ts::UT-45 bestätigungsgebundener story map-Ja-Zweig > UT-45 fragt einmal und setzt Backbone, Aktivitäten und Stories in Reihenfolge
+                    recorded_at: "2026-09-03T17:03:01Z"
+            - id: DD-46
+              kind: detail_design
+              title: Nein-Zweig und unveränderte Onboarding-Konstante
+              body: Nein-Zweig enthält genau einen Retrofit-Satz zur späteren story map und springt danach in bisherigen Abschnitt Erste Features; dessen 2–3 Stories, Given/When/Then, Bestätigungs-Gate sowie alle Folgeabschnitte bleiben semantisch und textlich unverändert. src/onboarding-prompt.ts wird nicht bearbeitet. Test hält vollständigen aktuellen ONBOARDING_PROMPT als Golden-Text oder stabilen Hash fest und prüft zusätzlich, dass ONBOARDING_INTERVIEW_PROMPT weiterhin genau einen Interview-Prompt als Suffix komponiert.
+              approved_content_hash: d42d2b5e814d75ade3669b3582e67ef1b237f329d65d69c86900eefa5170a680
+              approved_parent_hash: 8e4f91c2307abafc16bb2d486cffe9a31ca3b8f676cc118ccb5aeab70b37f32f
+              children:
+                - id: UT-46
+                  kind: unit_test
+                  title: Einmaliger Retrofit-Hinweis und byte-identischer Onboarding-Prompt
+                  body: Unit-Tests zählen Retrofit-Hinweis im Nein-Zweig genau einmal, prüfen Pflichtfragmente und Reihenfolge des bisherigen Flusses sowie exakte Bytes von ONBOARDING_PROMPT gegen aktuellen Stand. Komposition endet mit erweitertem INTERVIEW_PROMPT ohne Duplikat. Jeder Testname enthält ID dieses unit_test.
+                  approved_content_hash: c513fb6746b2cd3b3a69c354ff66affb348f59fb51f8d80136c615df2638ad51
+                  approved_parent_hash: d42d2b5e814d75ade3669b3582e67ef1b237f329d65d69c86900eefa5170a680
+                  evidence:
+                    tests:
+                        - test/init-prompt.test.ts::UT-46 unveränderter Nein-Zweig > UT-46 nennt Retrofit einmal und erhält bisherigen Feature-Fluss byte-identisch
+                        - test/onboarding-prompt.test.ts::UT-27 Sicherer Onboarding-Prompt und Gate-Rezepte > UT-46 AT-36 hält ONBOARDING_PROMPT byte-identisch und komponiert Interview einmal
+                    recorded_at: "2026-09-03T17:03:01Z"
+            - id: IT-20
+              kind: integration_test
+              title: init-Command komponiert erweitertes Interview mit unverändertem Onboarding-Prompt
+              body: Integrationstests registrieren /trellis:init für verdrahtete und unverdrahtete Projekte. Beide Nachrichten enthalten erweiterten INTERVIEW_PROMPT genau einmal; unverdrahteter Pfad stellt unveränderten ONBOARDING_PROMPT davor. Reihenfolge nach Beschreibung, Ja-/Nein-Anweisungen und weiterhin genau eine User-Nachricht werden geprüft. Testnamen enthalten ID dieses integration_test.
+              approved_content_hash: 8bbd52a0f0c41bfdbebcd28a19b6d881e0bde34574f4821e4126500bec69ab0a
+              approved_parent_hash: 8e4f91c2307abafc16bb2d486cffe9a31ca3b8f676cc118ccb5aeab70b37f32f
+              evidence:
+                tests:
+                    - test/integration-init.test.ts::IT-5 IT-12 Zustandserkennung des init-Commands im pi-Harness > IT-20 komponiert erweitertes Interview in beiden init-Pfaden genau einmal
+                recorded_at: "2026-09-03T17:03:01Z"
+        - id: AT-35
+          kind: acceptance_test
+          title: Bestätigte Backbone führt zu platzierter walking skeleton
+          body: Prompt-Vertragstests prüfen, dass INTERVIEW_PROMPT unmittelbar nach bestätigter Beschreibung genau einmal nach mehreren user activities fragt, einen Backbone-Entwurf bestätigt, Aktivitäten mit create_node kind=activity anlegt und vor jeder Story-Erstellung eine walking skeleton über alle Aktivitäten samt placement vorschlägt und bestätigen lässt. Testnamen enthalten ID dieses acceptance_test.
+          covers:
+            - US-20.AC-1
+            - US-20.AC-2
+          approved_content_hash: bac683fd3d36eb0d5b5a55f4142b0f79e2035a26731cfd93680b175a1edfca8c
+          approved_parent_hash: c86a942499f58c9236c1e0a3998a52b71765e9fe718d466c388cfa57c93b2ffe
+          evidence:
+            tests:
+                - test/acceptance-init.test.ts::AT-5 AT-15 Geführtes Onboarding und Projekt-Interview > AT-35 AT-36 bietet story map einmal an und bewahrt Nein-Fluss samt Onboarding-Prompt
+            recorded_at: "2026-09-03T17:03:01Z"
+        - id: AT-36
+          kind: acceptance_test
+          title: Ablehnung erhält bisherigen Interviewfluss und Onboarding-Prompt
+          body: 'Prompt- und Kompositionstests prüfen den Nein-Zweig: genau ein Satz zur späteren story map, danach unveränderter bisheriger Features-, Querschnitts-, Glossar-, Spec-Baum- und Abschlussfluss. ONBOARDING_PROMPT wird byte-identisch gegen aktuellen Text geprüft; ONBOARDING_INTERVIEW_PROMPT endet weiterhin mit INTERVIEW_PROMPT. Testnamen enthalten ID dieses acceptance_test.'
+          covers:
+            - US-20.AC-3
+            - US-20.AC-4
+          approved_content_hash: d5c99e57496cfd0ec6ecd0da8183f9112e48a2ac841014abbc6040dde078e72d
+          approved_parent_hash: c86a942499f58c9236c1e0a3998a52b71765e9fe718d466c388cfa57c93b2ffe
+          evidence:
+            tests:
+                - test/acceptance-init.test.ts::AT-5 AT-15 Geführtes Onboarding und Projekt-Interview > AT-35 AT-36 bietet story map einmal an und bewahrt Nein-Fluss samt Onboarding-Prompt
+                - test/onboarding-prompt.test.ts::UT-27 Sicherer Onboarding-Prompt und Gate-Rezepte > UT-46 AT-36 hält ONBOARDING_PROMPT byte-identisch und komponiert Interview einmal
+            recorded_at: "2026-09-03T17:03:01Z"
+    - id: US-21
+      kind: story
+      title: Feature dialog with placement proposals
+      body: 'A new prompt for adding a feature to an existing project, exposed as /trellis:story. With a story map: propose placement proposals for up to three user activities, including slice and gaps, and for large features a split into two stories, as numbered options; create only after the user picks. Without a story map and ten or more stories: mention the later addition once per session. Placement-Gate errors with candidates are turned into placement proposals instead of retries; a named unapproved or stale activity follows US-22 approval and one-retry recovery.'
+      status: done
+      paths:
+        - src/index.ts
+        - src/story-prompt.ts
+        - test/acceptance-story-dialog.test.ts
+        - test/story-command.test.ts
+        - test/story-prompt.test.ts
+        - test/integration-package.test.ts
+      acceptance_criteria:
+        - id: US-21.AC-1
+          given: a story map exists
+          when: the user runs /trellis:story with a feature idea
+          then: the agent shows numbered placement proposals with gaps before creating anything.
+        - id: US-21.AC-2
+          given: the user picks an option
+          when: the story is created
+          then: create_node is called with the chosen activity and slice.
+        - id: US-21.AC-3
+          given: no story map and ten or more stories
+          when: /trellis:story runs
+          then: the agent mentions adding a story map later exactly once per session.
+        - id: US-21.AC-4
+          given: trellis rejects a story creation with the Placement-Gate
+          when: the error names candidates
+          then: the agent presents them as placement proposals and does not retry blindly.
+      depends_on:
+        - target: US-19
+      approved_content_hash: d349bceccb1fe865cc77e5f0a863ac0ecec6862a2d4f1f998cb4854e97bb5d6f
+      children:
+        - id: AS-21
+          kind: arch
+          title: Sitzungsgebundener Feature-Dialog aus Overview und reinem Prompt-Builder
+          body: src/story-prompt.ts kapselt einen reinen Builder für den /trellis:story-User-Turn. src/index.ts registriert den Command, verlangt aktive Trellis-Verdrahtung und eine nichtleere Feature-Idee, lädt get_overview und übergibt Vorhandensein einer story map, Story-Anzahl sowie Status der Nachrüstungserinnerung an den Builder. Bei story map instruiert der Prompt zu höchstens drei nummerierten placement proposals mit activity, slice, gaps und optionaler Zweieraufteilung; Mutation folgt nur gewählter Option. Ohne story map bleibt ein bestätigungsgebundener unplatzierter Story-Fluss; ab zehn Stories erscheint der Nachrüstungshinweis einmal je Sitzung. Placement-Gate-Fehler mit anderen Kandidaten werden im Prompt in neue placement proposals übersetzt, ohne Blind-Retry; eine benannte unapproved oder stale activity folgt US-22. session_start löscht nur den Erinnerungsstatus. Bestehende Trellis-Modus-, Auto-Modus-, Review-Gate- und Interview-Prompt-Flüsse bleiben unverändert.
+          approved_content_hash: 54ff1d104a8761bd15e32d5171e5624fc1e3cc87453c3af9014e8d4ee2268521
+          approved_parent_hash: d349bceccb1fe865cc77e5f0a863ac0ecec6862a2d4f1f998cb4854e97bb5d6f
+          children:
+            - id: DD-47
+              kind: detail_design
+              title: Reiner Story-Prompt für Flüsse mit und ohne story map sowie Gate-Fehler
+              body: src/story-prompt.ts exportiert buildStoryPrompt mit Feature-Idee, hasStoryMap und mentionRetrofit. Ausgabe bewahrt Feature-Idee wörtlich. Mit story map fordert sie aktuelle get_overview-Daten, höchstens drei nummerierte placement proposals, activity und slice je Option, explizite gaps sowie bei großer Idee eine Option mit genau zwei Stories. Erst gewählte Option erlaubt create_node kind=story mit activity und slice. Ohne story map fordert sie normalen bestätigten Story-Vorschlag; mentionRetrofit ergänzt genau einen festen Nachrüstungssatz. Placement-Gate-Fehler mit anderen Kandidaten erzeugen neue nummerierte placement proposals und verbieten Blind-Retry bis zur Auswahl; benannte unapproved oder stale activity nutzt Approval und Einmal-Retry aus US-22.
+              approved_content_hash: 589be90743cdab119f6a2fbaad512d595be2b4aaa5de01ea5db7d895a39f5587
+              approved_parent_hash: 54ff1d104a8761bd15e32d5171e5624fc1e3cc87453c3af9014e8d4ee2268521
+              children:
+                - id: UT-47
+                  kind: unit_test
+                  title: Prompt-Varianten, Optionen und Mutations-Gates
+                  body: Unit-Tests prüfen exakte Feature-Idee, Varianten mit und ohne story map, höchstens drei nummerierte placement proposals, activity/slice je Option, gaps, Zweieraufteilung großer Features, User-Auswahl vor create_node sowie gewählte activity und slice. Nachrüstungssatz erscheint ausschließlich bei mentionRetrofit. Andere Placement-Gate-Kandidaten werden als neue Optionen gezeigt; Blind-Retry bleibt verboten. Benannte unapproved oder stale activity bleibt Ausnahme gemäß US-22. Jeder Testname enthält ID dieses unit_test.
+                  approved_content_hash: 2415aac6b01711933cd44e1ee2de802b8d7da9859568bea98afbffa5f1c1df23
+                  approved_parent_hash: 589be90743cdab119f6a2fbaad512d595be2b4aaa5de01ea5db7d895a39f5587
+                  evidence:
+                    tests:
+                        - test/story-prompt.test.ts::UT-47 Story-Prompt-Varianten und Mutations-Gates > UT-47 bewahrt Feature-Idee und fordert höchstens drei vollständige placement proposals
+                        - test/story-prompt.test.ts::UT-47 Story-Prompt-Varianten und Mutations-Gates > UT-47 verbietet bei Placement-Gate-Kandidaten Blind-Retry bis zur Auswahl
+                        - test/story-prompt.test.ts::UT-47 Story-Prompt-Varianten und Mutations-Gates > UT-47 erzeugt ohne story map bestätigten Fluss und optional genau einen Nachrüstungssatz
+                    recorded_at: "2026-09-03T17:15:49Z"
+            - id: DD-48
+              kind: detail_design
+              title: Command-Validierung, Overview-Auswertung und sitzungsgebundene Erinnerung
+              body: src/index.ts registriert trellis:story. Handler trimmt nur zur Leerprüfung, verlangt aktiven Trellis-Modus, lädt get_overview für aktive Projekt-ID und erkennt vorhandene story map über optionales story_map-Feld. Story-Anzahl stammt aus Overview-Stories-Liste; ohne story map und ab zehn Stories setzt er mentionRetrofit nur solange sitzungsinterner retrofitMentioned-Status false ist und markiert ihn erst beim gesendeten Prompt. Danach sendet er genau einen buildStoryPrompt-User-Turn. MCP-Fehler erzeugen keinen User-Turn, senden aber sichtbare Fehlermeldung; Erinnerungsstatus bleibt unverändert. session_start setzt retrofitMentioned zurück; andere Sessionzustände und Commands bleiben unberührt.
+              approved_content_hash: 511327af786027fbae5a20f07db93086f29ce922f452306ad232ca05d6d86a60
+              approved_parent_hash: 54ff1d104a8761bd15e32d5171e5624fc1e3cc87453c3af9014e8d4ee2268521
+              children:
+                - id: UT-48
+                  kind: unit_test
+                  title: Command-Guard, Story-Schwelle und Session-Reset
+                  body: Unit-Tests im pi-Harness prüfen Registrierung und Usage von /trellis:story, Leerargument, inaktiven Trellis-Modus, get_overview-Fehler ohne User-Turn, Erkennung einer story map, Story-Zählung bei 9 und 10, genau einen Nachrüstungshinweis über mehrere Aufrufe sowie Reset durch session_start. Erfolgsfälle senden genau eine Nachricht und bewahren Feature-Idee; bestehende Commands bleiben registriert. Jeder Testname enthält ID dieses unit_test.
+                  approved_content_hash: 530623fd41d472b919130136c15ef2e114bdd4e4a87d3f69733af75410409524
+                  approved_parent_hash: 511327af786027fbae5a20f07db93086f29ce922f452306ad232ca05d6d86a60
+                  evidence:
+                    tests:
+                        - test/story-command.test.ts::UT-48 trellis:story Command und Sitzungsstatus > UT-48 registriert Command und lehnt Leerargument sowie inaktiven Modus konkret ab
+                        - test/story-command.test.ts::UT-48 trellis:story Command und Sitzungsstatus > UT-48 sendet bei Overview-Fehler keinen User-Turn und setzt Erinnerung nicht
+                        - test/story-command.test.ts::UT-48 trellis:story Command und Sitzungsstatus > UT-48 erkennt story map und bewahrt Feature-Idee im einzigen User-Turn
+                        - test/story-command.test.ts::UT-48 trellis:story Command und Sitzungsstatus > UT-48 erwähnt Nachrüstung ab zehn Stories einmal und setzt Status bei session_start zurück
+                    recorded_at: "2026-09-03T17:15:49Z"
+            - id: IT-21
+              kind: integration_test
+              title: story-Command verbindet Overview mit Auswahl-Gates des Prompts
+              body: 'Integrationstests registrieren /trellis:story im pi-Harness, aktivieren Trellis-Modus und speisen get_overview-Antworten mit story_map ein. Sie prüfen genau einen User-Turn, unveränderte Feature-Idee und Prompt-Vertrag: vor jeder Mutation höchstens drei nummerierte placement proposals mit activity, slice, gaps und Zweieraufteilung; create_node kind=story erst nach User-Auswahl und dann ausschließlich mit gewählten placement-Werten. Testnamen enthalten ID dieses integration_test.'
+              approved_content_hash: 5faacdcf1534f4a42d75e840b96a0e70a2d0bdaeda5e29acb086bb3ad5bece40
+              approved_parent_hash: 54ff1d104a8761bd15e32d5171e5624fc1e3cc87453c3af9014e8d4ee2268521
+              evidence:
+                tests:
+                    - test/acceptance-story-dialog.test.ts::US-21 Feature-Dialog mit placement proposals > AT-37 IT-21 fordert Optionen aus story map und gewähltes placement vor jeder Story-Erstellung
+                recorded_at: "2026-09-03T17:15:49Z"
+            - id: IT-22
+              kind: integration_test
+              title: Sitzungserinnerung und Placement-Gate-Reaktion integrieren
+              body: Integrationstests führen /trellis:story wiederholt mit get_overview ohne story_map und mindestens zehn Stories aus. Nur erster User-Turn je Sitzung enthält Nachrüstungshinweis; weitere, Projekte unter Schwelle und Projekte mit story map nicht. session_start setzt Status zurück. Prompt-Vertrag übersetzt andere benannte Kandidaten eines Placement-Gate-Fehlers in nummerierte placement proposals samt gaps und verbietet erneuten create_node-Aufruf bis zur User-Auswahl; benannte unapproved oder stale activity folgt US-22. Testnamen enthalten ID dieses integration_test.
+              approved_content_hash: c29594e28551b0117920dd45c745df2e8808282f4b7c5dbfdfd6888ba038f0c0
+              approved_parent_hash: 54ff1d104a8761bd15e32d5171e5624fc1e3cc87453c3af9014e8d4ee2268521
+              evidence:
+                tests:
+                    - test/acceptance-story-dialog.test.ts::US-21 Feature-Dialog mit placement proposals > AT-38 IT-22 erwähnt Nachrüstung ohne story map ab zehn Stories einmal je Sitzung
+                    - test/acceptance-story-dialog.test.ts::US-21 Feature-Dialog mit placement proposals > AT-39 IT-22 wandelt Placement-Gate-Kandidaten in Auswahl um statt blindem Retry
+                recorded_at: "2026-09-03T17:15:49Z"
+        - id: AT-37
+          kind: acceptance_test
+          title: placement proposals für vorhandene story map
+          body: Black-box-Prompt-Vertragstests führen /trellis:story mit Feature-Idee bei vorhandener story map aus. Gesendeter User-Turn fordert vor jeder Mutation höchstens drei nummerierte placement proposals mit activity, slice, erkennbaren gaps und bei großem Umfang einer Option zur Aufteilung in genau zwei Stories. Er verbietet create_node ohne Auswahl und weist an, danach ausschließlich gewählte Story beziehungsweise Aufteilung mit gewählten activity- und slice-Werten zu erstellen. Testnamen enthalten ID dieses acceptance_test.
+          covers:
+            - US-21.AC-1
+            - US-21.AC-2
+          approved_content_hash: 79102a5277d7448df25b7d50ce0275bcca474ec9b1a807c2f0476799f6b0a9b4
+          approved_parent_hash: d349bceccb1fe865cc77e5f0a863ac0ecec6862a2d4f1f998cb4854e97bb5d6f
+          evidence:
+            tests:
+                - test/acceptance-story-dialog.test.ts::US-21 Feature-Dialog mit placement proposals > AT-37 IT-21 fordert Optionen aus story map und gewähltes placement vor jeder Story-Erstellung
+            recorded_at: "2026-09-03T17:15:49Z"
+        - id: AT-38
+          kind: acceptance_test
+          title: Einmaliger Nachrüstungshinweis ohne story map
+          body: Black-box-Tests führen /trellis:story in derselben Sitzung mehrfach gegen Projekt ohne story map und mit mindestens zehn Stories aus. Genau erster Prompt enthält Nachrüstungshinweis; weitere Aufrufe nicht. Unter zehn Stories und bei vorhandener story map fehlt Hinweis. session_start setzt sitzungsgebundene Erinnerung zurück. Testnamen enthalten ID dieses acceptance_test.
+          covers:
+            - US-21.AC-3
+          approved_content_hash: c9f6e08a248dbf5c26b8dd583c0d848c712d0862b8584c8b69a344f9850e1358
+          approved_parent_hash: d349bceccb1fe865cc77e5f0a863ac0ecec6862a2d4f1f998cb4854e97bb5d6f
+          evidence:
+            tests:
+                - test/acceptance-story-dialog.test.ts::US-21 Feature-Dialog mit placement proposals > AT-38 IT-22 erwähnt Nachrüstung ohne story map ab zehn Stories einmal je Sitzung
+            recorded_at: "2026-09-03T17:15:49Z"
+        - id: AT-39
+          kind: acceptance_test
+          title: Placement-Gate wird zu neuen Auswahloptionen
+          body: 'Black-box-Prompt-Vertragstests prüfen: Wenn create_node kind=story am Placement-Gate scheitert und andere Kandidaten nennt, weist Prompt Agent an, Kandidaten zu nummerierten placement proposals umzuformen, gaps zu erklären und auf neue User-Auswahl zu warten. Er verbietet blinde Wiederholung von create_node und erlaubt erst danach gewählte activity und slice. Benannte unapproved oder stale activity bleibt der Recovery-Ausnahme aus US-22 vorbehalten. Testnamen enthalten ID dieses acceptance_test.'
+          covers:
+            - US-21.AC-4
+          approved_content_hash: c8fce823e5174997f278fc88fe6034570c5b712b380cb09381026600e3c5c2aa
+          approved_parent_hash: d349bceccb1fe865cc77e5f0a863ac0ecec6862a2d4f1f998cb4854e97bb5d6f
+          evidence:
+            tests:
+                - test/acceptance-story-dialog.test.ts::US-21 Feature-Dialog mit placement proposals > AT-39 IT-22 wandelt Placement-Gate-Kandidaten in Auswahl um statt blindem Retry
+            recorded_at: "2026-09-03T17:15:49Z"
+    - id: US-22
+      kind: story
+      title: Activities are approved before placement
+      body: The interview (INTERVIEW_PROMPT, story map branch) and the /trellis:story flow read each newly created or edited activity with get_node and approve it with its content_hash before any set_map_position or create_node with placement targets it. A placement rejected because an activity is unapproved or stale is answered by reading and approving that activity, then retrying once; never by blind retries.
+      status: done
+      paths:
+        - src/init-prompt.ts
+        - src/story-prompt.ts
+        - test/init-prompt.test.ts
+        - test/story-prompt.test.ts
+        - test/acceptance-init.test.ts
+        - test/acceptance-story-dialog.test.ts
+        - test/integration-init.test.ts
+        - test/onboarding-prompt.test.ts
+      acceptance_criteria:
+        - id: US-22.AC-1
+          given: the interview creates activities
+          when: it proceeds to place stories
+          then: it reads each activity with get_node and approves it with the returned content_hash before the first placement.
+        - id: US-22.AC-2
+          given: /trellis:story creates or edits an activity
+          when: it places a story on it
+          then: the activity is approved first.
+        - id: US-22.AC-3
+          given: trellis rejects a placement because the activity is unapproved or stale
+          when: the error names the activity
+          then: the agent reads and approves that activity and retries the placement once.
+        - id: US-22.AC-4
+          given: the onboarding prompt
+          when: compared to the current text
+          then: it is unchanged.
+      depends_on:
+        - target: US-20
+        - target: US-21
+      approved_content_hash: c7f39a968a7dec6b13d3f6f02e130cf3786580d30640cea6ce3c211596f0eab4
+      children:
+        - id: AS-22
+          kind: arch
+          title: Approval-Gate für Activity-basierte Placements in beiden Prompts
+          body: 'Nur Prompt-Verträge ändern: INTERVIEW_PROMPT in src/init-prompt.ts und buildStoryPrompt in src/story-prompt.ts. Beide Flüsse behandeln activity als approvte Voraussetzung jedes placement: Nach create_node oder update_node liest Agent betroffene activity per get_node, approvt sie mit zurückgegebenem content_hash und ruft erst danach set_map_position oder create_node mit activity/slice auf. Meldet trellis unapproved oder stale activity, liest und approvt Agent exakt benannte activity und wiederholt fehlgeschlagenes placement genau einmal; andere Placement-Gate-Kandidaten bleiben placement proposals ohne Blind-Retry. src/onboarding-prompt.ts und ONBOARDING_PROMPT bleiben byte-identisch. Tests erweitern Prompt-, Integration- und Acceptance-Suites für Reihenfolge, Hash-Verwendung, Einmal-Retry und unverändertes Onboarding.'
+          approved_content_hash: b82ebbe7af91a5cdf185da88e03d182f219a37a8b13f29dde018527b3a17cf8a
+          approved_parent_hash: c7f39a968a7dec6b13d3f6f02e130cf3786580d30640cea6ce3c211596f0eab4
+          children:
+            - id: DD-49
+              kind: detail_design
+              title: Interview approvt neue Activities vor erster Story-Platzierung
+              body: 'INTERVIEW_PROMPT ergänzt im bestätigten story map-Ja-Zweig nach Erstellung aller user activities ein explizites Approval-Gate. Für jede neu erstellte activity ruft Agent get_node auf und danach approve mit ID und exakt zurückgegebenem content_hash. Erst wenn jede activity approvt ist, darf erste set_map_position- oder create_node-Operation mit placement beginnen. Scheitert placement wegen unapproved oder stale activity, gilt gemeinsamer Recovery-Schritt: benannte activity lesen, mit aktuellem Hash approven, denselben placement-Aufruf einmal wiederholen; erneuter Fehler wird berichtet statt nochmals versucht.'
+              approved_content_hash: 755c8b06eae1d273fcf945b994fee7ab1be35a55429cbdc2c13c710236f68df7
+              approved_parent_hash: b82ebbe7af91a5cdf185da88e03d182f219a37a8b13f29dde018527b3a17cf8a
+              children:
+                - id: UT-49
+                  kind: unit_test
+                  title: Interview-Reihenfolge, Hash-Weitergabe und Einmal-Retry
+                  body: Unit-Tests prüfen Pflichtfragmente und Reihenfolge create_node kind=activity, get_node, approve mit zurückgegebenem content_hash und erst danach set_map_position oder create_node mit placement. Fehlerpfad nennt unapproved und stale, liest benannte activity, approvt aktuellen Hash und erlaubt exakt einen Retry. Jeder Testname enthält ID dieses unit_test.
+                  approved_content_hash: 42ac6a9a876f2e103384db36905e1f3cebc8ab74221ba54369a4a2b7d6c216d2
+                  approved_parent_hash: 755c8b06eae1d273fcf945b994fee7ab1be35a55429cbdc2c13c710236f68df7
+                  evidence:
+                    tests:
+                        - test/init-prompt.test.ts::UT-49 Interview-Reihenfolge, Hash-Weitergabe und Einmal-Retry > UT-49 approvt jede neue activity vor erster placement-Mutation
+                        - test/init-prompt.test.ts::UT-49 Interview-Reihenfolge, Hash-Weitergabe und Einmal-Retry > UT-49 repariert benannte unapproved oder stale activity und retried einmal
+                    recorded_at: "2026-09-03T17:57:50Z"
+            - id: DD-50
+              kind: detail_design
+              title: Story-Dialog approvt erstellte oder bearbeitete Activity vor Placement
+              body: buildStoryPrompt weist /trellis:story an, jede im Flow neu erstellte oder per update_node bearbeitete activity nach Mutation per get_node zu lesen und mit zurückgegebenem content_hash zu approven. Erst danach darf create_node kind=story mit activity/slice oder set_map_position folgen. Bei unapproved-/stale-Fehler für benannte activity liest und approvt Agent diese und wiederholt den fehlgeschlagenen placement-Aufruf genau einmal. Bestehende Behandlung von Placement-Gate-Kandidaten als placement proposals bleibt bestehen; Recovery ohne benannte activity und Blind-Retry bleiben verboten.
+              approved_content_hash: 0330973be39b061c0a5402d7a8b76a9c8cf06ad57cea95745c7b64c2d7c221a1
+              approved_parent_hash: b82ebbe7af91a5cdf185da88e03d182f219a37a8b13f29dde018527b3a17cf8a
+              children:
+                - id: UT-50
+                  kind: unit_test
+                  title: Story-Prompt für Activity-Mutation, Approval und Recovery
+                  body: 'Unit-Tests prüfen neue und per update_node bearbeitete activity: get_node und approve mit zurückgegebenem content_hash liegen nach Mutation und vor placement. Fehlerpfad wiederholt nur bei benannter unapproved/stale activity nach Approval genau einmal; Placement-Gate-Kandidaten bleiben ohne Blind-Retry. Jeder Testname enthält ID dieses unit_test.'
+                  approved_content_hash: c1dccceb061ce25f8eac08c1aa82131def46be8060258b2bef98cd2895667497
+                  approved_parent_hash: 0330973be39b061c0a5402d7a8b76a9c8cf06ad57cea95745c7b64c2d7c221a1
+                  evidence:
+                    tests:
+                        - test/story-prompt.test.ts::UT-50 Story-Prompt für Activity-Mutation, Approval und Recovery > UT-50 approvt neue oder bearbeitete activity vor placement
+                        - test/story-prompt.test.ts::UT-50 Story-Prompt für Activity-Mutation, Approval und Recovery > UT-50 repariert nur benannte unapproved oder stale activity und retried einmal
+                    recorded_at: "2026-09-03T17:57:50Z"
+            - id: IT-23
+              kind: integration_test
+              title: init-Flow verbindet Activity-Erstellung, Approval und Placement in Reihenfolge
+              body: 'Integrationstests registrieren /trellis:init und prüfen im gesendeten INTERVIEW_PROMPT den ausführbaren Vertrag: create_node kind=activity, get_node je activity, approve mit content_hash, danach erste placement-Mutation. Zusätzlich prüfen sie benannte unapproved-/stale-Recovery mit genau einem Retry. Testnamen enthalten ID dieses integration_test.'
+              approved_content_hash: af242d4642c17e46fe53bc7e0fabb75297f197b8a0f3e721f193874694965c0c
+              approved_parent_hash: b82ebbe7af91a5cdf185da88e03d182f219a37a8b13f29dde018527b3a17cf8a
+              evidence:
+                tests:
+                    - test/integration-init.test.ts::IT-5 IT-12 Zustandserkennung des init-Commands im pi-Harness > IT-23 verbindet Activity-Erstellung, Approval und Placement-Recovery
+                recorded_at: "2026-09-03T17:57:50Z"
+            - id: IT-24
+              kind: integration_test
+              title: story-Flow verbindet Activity-Änderung, Approval und Placement-Recovery
+              body: 'Integrationstests registrieren /trellis:story bei vorhandener story map und prüfen im User-Turn: neue oder bearbeitete activity wird nach create_node/update_node gelesen, mit aktuellem content_hash approvt und erst danach für placement verwendet. Benannter unapproved-/stale-Fehler führt zu read, approve und genau einem Retry; Placement-Gate-Kandidaten bleiben Auswahloptionen. Testnamen enthalten ID dieses integration_test.'
+              approved_content_hash: cc8d636e5bbebe9553404bee0f310f9870f6f56969c50907678d84ddc2a10bff
+              approved_parent_hash: b82ebbe7af91a5cdf185da88e03d182f219a37a8b13f29dde018527b3a17cf8a
+              evidence:
+                tests:
+                    - test/acceptance-story-dialog.test.ts::US-21 Feature-Dialog mit placement proposals > AT-41 IT-24 approvt neue oder bearbeitete Activity vor Placement
+                    - test/acceptance-story-dialog.test.ts::US-21 Feature-Dialog mit placement proposals > AT-42 IT-24 repariert benannte stale Activity und retried Placement einmal
+                recorded_at: "2026-09-03T17:57:50Z"
+        - id: AT-40
+          kind: acceptance_test
+          title: Interview approvt Activities vor erster Platzierung
+          body: Black-box-Prompt-Vertragstest prüft, dass INTERVIEW_PROMPT jede im story map-Zweig erzeugte activity per get_node liest und mit zurückgegebenem content_hash approvt, bevor erste set_map_position- oder create_node-Operation mit placement erfolgt. Testname enthält ID dieses acceptance_test.
+          covers:
+            - US-22.AC-1
+          approved_content_hash: fffdaa61fb8f62bb97d664e146da9ed78cb261b626b83541e77db211fbcd1581
+          approved_parent_hash: c7f39a968a7dec6b13d3f6f02e130cf3786580d30640cea6ce3c211596f0eab4
+          evidence:
+            tests:
+                - test/acceptance-init.test.ts::AT-5 AT-15 Geführtes Onboarding und Projekt-Interview > AT-40 approvt Interview-Activities vor erster Platzierung
+            recorded_at: "2026-09-03T17:57:50Z"
+        - id: AT-41
+          kind: acceptance_test
+          title: Story-Dialog approvt neue oder bearbeitete Activity
+          body: Black-box-Prompt-Vertragstest prüft, dass /trellis:story nach create_node oder update_node einer activity zwingend get_node und approve mit aktuellem content_hash ausführt, bevor Story-Erstellung oder Umplatzierung diese activity als placement nutzt. Testname enthält ID dieses acceptance_test.
+          covers:
+            - US-22.AC-2
+          approved_content_hash: a62603a612f917f74d404c3f74c005929e5cec02844ddbd8d76f4b1ba4d24b04
+          approved_parent_hash: c7f39a968a7dec6b13d3f6f02e130cf3786580d30640cea6ce3c211596f0eab4
+          evidence:
+            tests:
+                - test/acceptance-story-dialog.test.ts::US-21 Feature-Dialog mit placement proposals > AT-41 IT-24 approvt neue oder bearbeitete Activity vor Placement
+            recorded_at: "2026-09-03T17:57:50Z"
+        - id: AT-42
+          kind: acceptance_test
+          title: Benannte stale Activity wird einmalig repariert und Placement wiederholt
+          body: 'Black-box-Prompt-Vertragstests prüfen für Interview und /trellis:story: Nennt trellis bei abgelehntem placement eine unapproved oder stale activity, liest Agent genau diese activity, approvt sie mit aktuellem content_hash und wiederholt fehlgeschlagenen placement-Aufruf genau einmal. Kein weiterer oder blinder Retry ist erlaubt. Testnamen enthalten ID dieses acceptance_test.'
+          covers:
+            - US-22.AC-3
+          approved_content_hash: 016f615ff5574f670b3aeea88d9cc503ec0d9fab56a7c9b4b30f76e8bf19463b
+          approved_parent_hash: c7f39a968a7dec6b13d3f6f02e130cf3786580d30640cea6ce3c211596f0eab4
+          evidence:
+            tests:
+                - test/acceptance-init.test.ts::AT-5 AT-15 Geführtes Onboarding und Projekt-Interview > AT-42 repariert benannte stale Activity und retried einmal
+                - test/acceptance-story-dialog.test.ts::US-21 Feature-Dialog mit placement proposals > AT-42 IT-24 repariert benannte stale Activity und retried Placement einmal
+            recorded_at: "2026-09-03T17:57:50Z"
+        - id: AT-43
+          kind: acceptance_test
+          title: Onboarding-Prompt bleibt byte-identisch
+          body: Golden-Test vergleicht ONBOARDING_PROMPT mit aktuellem Text und belegt byte-identische Ausgabe trotz Änderungen an INTERVIEW_PROMPT und buildStoryPrompt. Testname enthält ID dieses acceptance_test.
+          covers:
+            - US-22.AC-4
+          approved_content_hash: d024d8dde2407b90bba7f4ab2aa8a33931bef905410c0d1960bfd3f057d4a35e
+          approved_parent_hash: c7f39a968a7dec6b13d3f6f02e130cf3786580d30640cea6ce3c211596f0eab4
+          evidence:
+            tests:
+                - test/acceptance-init.test.ts::AT-5 AT-15 Geführtes Onboarding und Projekt-Interview > AT-43 hält Onboarding-Prompt byte-identisch
+            recorded_at: "2026-09-03T17:57:50Z"

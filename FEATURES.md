@@ -22,6 +22,10 @@
 - **US-16** — Review-Gate zählt proaktive Reviews robust
 - **US-17** — Doppel-Load der Extension prozessweit verhindern
 - **US-18** — Kategorisierte Token-Usage melden
+- **US-19** — Map line in context block
+- **US-20** — Interview offers a story map
+- **US-21** — Feature dialog with placement proposals
+- **US-22** — Activities are approved before placement
 
 ## Glossary
 
@@ -30,6 +34,7 @@
 - **Aufbewahrungsfenster** — Anzahl abgeschlossener Turns, die externe read-Results vollständig bleiben.
 - **Auto-Load** — Projektlokales automatisches Laden der Extension durch pi.
 - **Auto-Modus** — Sitzungsmodus, der startbare Stories nacheinander bis done bearbeitet.
+- **Backbone** — Geordnete user activities einer story map.
 - **Board-Adresse** — Konfigurierbare Live-Board-Basisadresse; Standard http://127.0.0.1:7420.
 - **Branch-Gate-Hook** — Hook, der direkte Commits auf develop blockiert.
 - **Context-Hygiene** — Verlustfreie Bereinigung überholter LLM-Kontextinhalte.
@@ -37,10 +42,12 @@
 - **Doppel-Load** — Mehrfache Aktivierung derselben Extension in einem pi-Prozess.
 - **Drei-Prüfer-Check** — Parallele Prüfung durch drei Qualitätsagenten.
 - **Fail-open** — Warnendes Durchlassen von finish nach drei Blockierungen.
+- **gaps** — Unbesetzte activity/slice-Bereiche einer story map.
 - **Gate-Rezept** — Stackbezogene CLI-Konfiguration für Lint, Tests und Coverage.
 - **Interview-Prompt** — Strukturierte LLM-Anleitung für das geführte Projekt-Interview.
 - **Kanban-Zusammenfassung** — UI-only Übersicht über Story-Zähler, aktive Arbeit und Risiken.
 - **Legacy-Fallback** — Nicht kategorisierbare Usage als totalTokens-Gesamtwert.
+- **map line** — One compact context-block line summarizing the story map; absent without a map.
 - **Nutzer-Override** — Projektlokales Subagent-Rezept mit Vorrang vor der globalen Datei.
 - **Onboarding-Modus** — Zustandsabhängige Trellis-Ersteinrichtung über /trellis:init.
 - **Onboarding-Prompt** — LLM-Anleitung zur sicheren Trellis-Ersteinrichtung.
@@ -49,12 +56,16 @@
 - **pi-Resource-Rang** — Ladepriorität einer pi-Ressource; niedriger Rang lädt zuerst.
 - **pi-Runtime** — Gemeinsamer Extension-Event-Bus eines laufenden pi-Prozesses.
 - **pi-subagents-Record** — Lifecycle-Event completed oder failed mit Subagent-Usage.
+- **placement** — Zuordnung einer Story zu activity und slice.
+- **placement proposal** — Numbered options (activity, slice, split) the agent offers before creating a story.
+- **Placement-Gate** — Validierung gegen Story-Erstellung ohne gültiges placement.
 - **Projekt-Skeleton** — Minimale initiale Datei- und Verzeichnisstruktur.
 - **Reliktsuche** — Read-only Suche nach Code- und Spec-Relikten.
 - **Review-Gate** — Finish-Sperre bis zur Review-Freigabe oder zum Fail-open.
 - **Review-Runde** — Storybezogene Prüfung durch fünf erfolgreiche read-only Agent-Ergebnisse vor finish.
 - **Settings-Extension** — Über .pi/settings.json geladene projektlokale Extension.
 - **Statusline-Eintrag** — Dezente aktuelle Anzeige der laufenden Story und ihrer Gates.
+- **story map** — Optional trellis 2D view: activities left to right, stories below, slices across.
 - **Story-Fenster** — Turns vom erfolgreichen start bis einschließlich erfolgreichen finish einer Story.
 - **Subagent-Rezept** — Markdown-Definition eines spezialisierten Agenten; kanonisch im pi-Package, global installierbar und projektlokal überschreibbar.
 - **Token-Usage** — Von pi gemeldete Gesamtzahl verbrauchter Tokens.
@@ -63,7 +74,9 @@
 - **Trellis-Modus** — Aktivierte Trellis-Kontextinjektion einer pi-Sitzung.
 - **Trellis-Overview** — Von get_overview gelieferte Projektübersicht.
 - **Usage-Delta** — Seit letzter erfolgreicher Meldung neu zugeordnete Token-Usage.
+- **user activities** — Aktivitätsknoten einer story map.
 - **Vorab-Commit** — Vollständiger Projekt-Commit unmittelbar vor trellis init.
+- **walking skeleton** — Erste Stories über alle bestätigten user activities.
 - **Worktree-Pfad** — Pfad des einer Story zugeordneten Worktrees.
 - **Änderungsreview** — Read-only Architekturprüfung großer Änderungen.
 
